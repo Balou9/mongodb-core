@@ -1,4 +1,4 @@
-'use strict';
+// 'use strict';
 // const net = require('net');
 // const tls = require('tls');
 // const Connection = require('./connection');
@@ -14,7 +14,7 @@ import { createClientInfo } from "./../topologies/shared.ts";
 import { MongoError, MongoNetworkError} from "./../errors.ts"
 // const MongoNetworkError = require('../error').MongoNetworkError;
 // const defaultAuthProviders = require('../auth/defaultAuthProviders').defaultAuthProviders;
-import { defaultAuthProviders } from "./../auth/defaultAuthProviders.ts"
+import { AUTH_PROVIDERS } from "./../auth/authProviders.ts"
 // const WIRE_CONSTANTS = require('../wireprotocol/constants');
 // const MAX_SUPPORTED_WIRE_VERSION = WIRE_CONSTANTS.MAX_SUPPORTED_WIRE_VERSION;
 // const MAX_SUPPORTED_SERVER_VERSION = WIRE_CONSTANTS.MAX_SUPPORTED_SERVER_VERSION;
@@ -25,15 +25,15 @@ MIN_SUPPORTED_WIRE_VERSION, MIN_SUPPORTED_SERVER_VERSION} from "./../wireprotoco
 
 export interface ConnectOptions {
   family?: number;
-  bson?: unknown;
+  // bson?: unknown;
 }
 
-let AUTH_PROVIDERS: unknown;
+// let AUTH_PROVIDERS: {[key:string]: Function} = defaultAuthProviders();
 
 export async function connect(options: ConnectOptions): Promise<Connection> {
-  if (!AUTH_PROVIDERS) {
-    AUTH_PROVIDERS = defaultAuthProviders(options.bson);
-  }
+  // if (!AUTH_PROVIDERS) {
+  //   AUTH_PROVIDERS = defaultAuthProviders(options.bson);
+  // }
 
   if (options.family !== 4 && options.family !== 6) {
     throw new MongoNetworkError(`Unsupported ip version: ${options.family}.`)
@@ -130,6 +130,7 @@ async function performInitialHandshake(connection: Connection, options: {[key:st
   // };
 
   let compressors: unknown[] = [];
+  
   if (options.compression && options.compression.compressors) {
     compressors = options.compression.compressors;
   }
@@ -143,59 +144,61 @@ async function performInitialHandshake(connection: Connection, options: {[key:st
     getSaslSupportedMechs(options)
   );
 
-  const start: number = new Date().getTime();
+  const start: number = Date.now()
+  let  ismaster: {[key:string]:any}
 
-  runCommand(connection, 'admin.$cmd', handshakeDoc, options, (err: Error, ismaster: {[key:string]: any}): void => {
-    if (err) {
-      connection.destroy()
-      // return _callback(err, null);
-      throw err
-    }
-
-    if (ismaster.ok === 0) {
-      // return _callback(new MongoError(ismaster), null);
-      connection.destroy()
-      throw new MongoError(ismaster)
-    }
-
-    const supportedServerErr: MongoError = checkSupportedServer(ismaster, options);
-
-    if (supportedServerErr) {
-      // return   _callback(supportedServerErr, null);
-      connection.destroy()
-      throw supportedServerErr
-    }
-
-    // resolve compression
-    if (ismaster.compression) {
-      const agreedCompressors: unknown[] = compressors.filter(
-        (compressor: any): boolean => ismaster.compression.indexOf(compressor) !== -1
-      );
-
-      if (agreedCompressors.length) {
-        connection.agreedCompressor = agreedCompressors[0];
+  try {
+    ismaster =  await runCommand(connection, 'admin.$cmd', handshakeDoc, options);
+  } catch(err) {
+    connection.destroy()
+    // return _callback(err, null);
+    throw err
+  }
+  
+  
+      if (ismaster.ok === 0) {
+        // return _callback(new MongoError(ismaster), null);
+        connection.destroy()
+        throw new MongoError(ismaster)
       }
 
-      if (options.compression && options.compression.zlibCompressionLevel) {
-        connection.zlibCompressionLevel = options.compression.zlibCompressionLevel;
+      const supportedServerErr: MongoError = checkSupportedServer(ismaster, options);
+
+      if (supportedServerErr) {
+        // return   _callback(supportedServerErr, null);
+        connection.destroy()
+        throw supportedServerErr
       }
-    }
 
-    // NOTE: This is metadata attached to the connection while porting away from
-    //       handshake being done in the `Server` class. Likely, it should be
-    //       relocated, or at very least restructured.
-    connection.ismaster = ismaster;
-    connection.lastIsMasterMS = new Date().getTime() - start;
+      // resolve compression
+      if (ismaster.compression) {
+        const agreedCompressors: unknown[] = compressors.filter(
+          (compressor: unknown): boolean => ismaster.compression.indexOf(compressor) !== -1
+        );
 
-    const credentials: {[key:string]: any} = options.credentials;
+        if (agreedCompressors.length) {
+          connection.agreedCompressor = agreedCompressors[0];
+        }
 
-    if (!ismaster.arbiterOnly && credentials) {
-      credentials.resolveAuthMechanism(ismaster);
-      return authenticate(connection, credentials);
-    }
+        if (options.compression && options.compression.zlibCompressionLevel) {
+          connection.zlibCompressionLevel = options.compression.zlibCompressionLevel;
+        }
+      }
 
-    return connection;
-  });
+      // NOTE: This is metadata attached to the connection while porting away from
+      //       handshake being done in the `Server` class. Likely, it should be
+      //       relocated, or at very least restructured.
+      connection.ismaster = ismaster;
+      connection.lastIsMasterMS =  Date.now() - start;
+
+      const credentials: {[key:string]: any} = options.credentials;
+
+      if (!ismaster.arbiterOnly && credentials) {
+        credentials.resolveAuthMechanism(ismaster);
+        return authenticate(connection, credentials);
+      }
+
+      return connection;
 }
 
 // const LEGAL_SSL_SOCKET_OPTIONS: string[] = [
@@ -355,80 +358,83 @@ async function makeConnection(family: number, options: {[key:string]: any}): Pro
 
 const CONNECTION_ERROR_EVENTS: string[] = ['error', 'close', 'timeout', 'parseError'];
 
-function runCommand(connection: Connection, ns: string, command: { [key:string]: any}, options: { [key:string]: any}, callback:(err?: Error, doc?: { [key:string]: any}) => void): Promise<void> {
-  // if (typeof options === 'function') (callback = options), (options = {});
-  const socketTimeout: number = typeof options.socketTimeout === 'number' ? options.socketTimeout : 360000;
-  // const bson = conn.options.bson;
-  const query: Query = new Query(BSON, ns, command, {
-    numberToSkip: 0,
-    numberToReturn: 1
-  });
+async function runCommand(connection: Connection, ns: string, command: { [key:string]: any}, options: { [key:string]: any}/*, callback:(err?: Error, doc?: { [key:string]: any}) => void*/): Promise<{ [key:string]: any}> {
+  return new Promise((resolve:(ismaster: {[key:string]: any})=> void, reject: (err?: Error) => void): void => {
+    // if (typeof options === 'function') (callback = options), (options = {});
+    const socketTimeout: number = typeof options.socketTimeout === 'number' ? options.socketTimeout : 360000;
+    // const bson = conn.options.bson;
+    const query: Query = new Query(BSON, ns, command, {
+      numberToSkip: 0,
+      numberToReturn: 1
+    });
 
-  function errorHandler(err?: Error): void {
-    connection.resetSocketTimeout();
-    CONNECTION_ERROR_EVENTS.forEach((eventName:string): void => connection.removeListener(eventName, errorHandler));
-    connection.removeListener('message', messageHandler);
-    callback(err, null);
-  }
-
-  function messageHandler(msg: { [key:string]: any}): void {
-    if (msg.responseTo !== query.requestId) {
-      return;
+    function errorHandler(err?: Error): void {
+      connection.resetSocketTimeout();
+      CONNECTION_ERROR_EVENTS.forEach((eventName:string): void => connection.removeListener(eventName, errorHandler));
+      connection.removeListener('message', messageHandler);
+      // callback(err, null);
+      reject(err);
     }
 
-    connection.resetSocketTimeout();
-    CONNECTION_ERROR_EVENTS.forEach((eventName:string): void => connection.removeListener(eventName, errorHandler));
-    connection.removeListener('message', messageHandler);
+    function messageHandler(msg: { [key:string]: any}): void {
+      if (msg.responseTo !== query.requestId) {
+        return;
+      }
 
-    msg.parse({ promoteValues: true });
-    callback(null, msg.documents[0]);
-  }
+      connection.resetSocketTimeout();
+      CONNECTION_ERROR_EVENTS.forEach((eventName:string): void => connection.removeListener(eventName, errorHandler));
+      connection.removeListener('message', messageHandler);
 
-  connection.setSocketTimeout(socketTimeout);
-  CONNECTION_ERROR_EVENTS.forEach((eventName:string): void => connection.once(eventName, errorHandler));
-  connection.on('message', messageHandler);
+      msg.parse({ promoteValues: true });
+      // callback(null, msg.documents[0]);
+      resolve( msg.documents[0])
+    }
 
-  connection.write(query.toBin());
+    connection.setSocketTimeout(socketTimeout);
+    CONNECTION_ERROR_EVENTS.forEach((eventName:string): void => connection.once(eventName, errorHandler));
+    connection.on('message', messageHandler);
 
-  // // REVISIT: this is cheap and unstable - waiting 4 a particular socket msg -
-  // const buf: Uint8Array = new Uint8Array(65536);
-  // const end: number = Date.now() + socketTimeout
-  // let readResult: Deno.ReadResult;
-  // let msg: {[key:string]: any};
-  //
-  // for (;;) {
-  //   readResult = await conn.read(buf)
-  //
-  //   msg = decode(buf.subarray(0, readResult.nread), "utf8")
-  //
-  //   if (msg.responseTo === query.requestId) {
-  //     msg.parse({ promoteValues: true });
-  //     // return callback(null, msg.documents[0]);
-  //     return msg.documents[0]
-  //   }
-  //
-  //   if (Date.now() >= end) {
-  //     // return callback(new MongoError("Connection timeout."))
-  //     throw new MongoError("Connection timeout.")
-  //   }
-  // }
+    connection.write(query.toBin());
+
+    // // REVISIT: this is cheap and unstable - waiting 4 a particular socket msg -
+    // const buf: Uint8Array = new Uint8Array(65536);
+    // const end: number = Date.now() + socketTimeout
+    // let readResult: Deno.ReadResult;
+    // let msg: {[key:string]: any};
+    //
+    // for (;;) {
+    //   readResult = await conn.read(buf)
+    //
+    //   msg = decode(buf.subarray(0, readResult.nread), "utf8")
+    //
+    //   if (msg.responseTo === query.requestId) {
+    //     msg.parse({ promoteValues: true });
+    //     // return callback(null, msg.documents[0]);
+    //     return msg.documents[0]
+    //   }
+    //
+    //   if (Date.now() >= end) {
+    //     // return callback(new MongoError("Connection timeout."))
+    //     throw new MongoError("Connection timeout.")
+    //   }
+    // }
+  })
 }
 
-async function authenticate(conn: Deno.Conn, credentials: {[key:string]: any}): Promise<Deno.Conn>{
+async function authenticate(conn: Deno.Conn, credentials: {[key:string]: any}): Promise<Deno.Conn> {
   const mechanism: string = credentials.mechanism;
+  const authProvider: any = AUTH_PROVIDERS[mechanism];
 
-  if (!AUTH_PROVIDERS[mechanism]) {
+  if (!authProvider) {
     throw new MongoError(`authMechanism '${mechanism}' not supported`)
   }
-
-  const provider: unknown = AUTH_PROVIDERS[mechanism];
 
   // provider.auth(runCommand, [conn], credentials, (err?: Error) => {
   //   if (err) {return callback(err);}
   //   callback(null, conn);
   // });
 
-  return provider.auth(runCommand, [conn], credentials);
+  return authProvider.auth(runCommand, [conn], credentials);
 }
 //
 // function connectionFailureError(type: string, err) {
