@@ -130,7 +130,7 @@ async function performInitialHandshake(connection: Connection, options: {[key:st
   // };
 
   let compressors: unknown[] = [];
-  
+
   if (options.compression && options.compression.compressors) {
     compressors = options.compression.compressors;
   }
@@ -154,8 +154,8 @@ async function performInitialHandshake(connection: Connection, options: {[key:st
     // return _callback(err, null);
     throw err
   }
-  
-  
+
+
       if (ismaster.ok === 0) {
         // return _callback(new MongoError(ismaster), null);
         connection.destroy()
@@ -191,7 +191,7 @@ async function performInitialHandshake(connection: Connection, options: {[key:st
       connection.ismaster = ismaster;
       connection.lastIsMasterMS =  Date.now() - start;
 
-      const credentials: {[key:string]: any} = options.credentials;
+      const credentials: MongoCredentials = options.credentials;
 
       if (!ismaster.arbiterOnly && credentials) {
         credentials.resolveAuthMechanism(ismaster);
@@ -421,7 +421,7 @@ async function runCommand(connection: Connection, ns: string, command: { [key:st
   })
 }
 
-async function authenticate(conn: Deno.Conn, credentials: {[key:string]: any}): Promise<Deno.Conn> {
+async function authenticate(conn: Deno.Conn, credentials: MongoCredentials): Promise<Deno.Conn> {
   const mechanism: string = credentials.mechanism;
   const authProvider: any = AUTH_PROVIDERS[mechanism];
 
