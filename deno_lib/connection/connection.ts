@@ -2,6 +2,7 @@
 import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
 import { sha1 } from "https://denopkg.com/chiefbiiko/sha1/mod.ts"
 import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
+import { encode, decode } from "https://denopkg.com/chiefbiiko/std-encoding/mod.ts"
 // const crypto = require('crypto');
 // const debugOptions = require('./utils').debugOptions;
 import { debugOptions} from "./utils.ts";
@@ -19,6 +20,53 @@ import { MongoError, MongoNetworkError} from "./../errors.ts"
 // const Logger = require('./logger');
 import { Logger } from "./logger.ts"
 import { OP_CODES, MESSAGE_HEADER_SIZE } from "./../wireprotocol/shared.ts"
+
+function noop(): void {}
+
+/**
+ * Performs non-blocking automatic reads, similar to push-based APIs, with the
+ * ondata listener being called with every read data chunk.
+ */
+function pullNonBlocking(
+  reader: Deno.Reader,
+  ondata: (chunk: Uint8Array) => any,
+  onerror?: (err: Error) => any
+): Promise<void> {
+  const it: AsyncIterableIterator<Uint8Array> = Deno.toAsyncIterator(reader);
+  let result: { done: boolean; value: Uint8Array };
+
+  return new Promise(
+    async (): Promise<void> => {
+      for (;;) {
+        result = await it.next();
+
+        if (result.done) {
+          break;
+        }
+
+        ondata(result.value);
+      }
+    }
+  ).catch(onerror || noop);
+}
+
+/** Concatenates given buffers. */
+function concat(bufs: Uint8Array[]): Uint8Array {
+  const total: number = bufs.reduce(
+    (acc, cur): number => acc + cur.byteLength,
+    0
+  );
+
+  const buf: Uint8Array = new Uint8Array(total);
+  let offset: number = 0;
+
+  for (const b of bufs) {
+    buf.set(b, offset);
+    offset += b.byteLength;
+  }
+
+  return buf;
+}
 
 const OP_COMPRESSED: number = OP_CODES.OP_COMPRESSED;
 
@@ -49,9 +97,9 @@ const DEBUG_FIELDS: string[] = [
   'checkServerIdentity'
 ];
 
-let connectionAccountingSpy: Function = undefined;
+let connectionAccountingSpy: any = undefined;
 let connectionAccounting: boolean = false;
-let connections: { [key:string]: Connection} = {};
+let connections: { [key:number]: Connection} = {};
 
 export interface ConnectionOptions {
   maxBSONMessageSize?: number;
@@ -82,6 +130,7 @@ export class Connection extends EventEmitter {
   readonly keepAliveInitialDelay: number
   readonly connectionTimeout: number;
   readonly responseOptions: { [key:string]: any}
+  readonly   conn: Deno.Conn
 
   flushing: boolean
   queue:  unknown[]
@@ -89,7 +138,7 @@ export class Connection extends EventEmitter {
   destroyed: boolean
   hashedName: string
   workItems: unknown[]
-  conn: Deno.Conn
+
 
 
 
@@ -180,24 +229,27 @@ export class Connection extends EventEmitter {
     // this.conn.once('close', closeHandler(this));
     this.conn.on('data', dataHandler(this));
 
+    // need to block with conn's pull-based API, isolate in micro-thread
+    pullNonBlocking(conn, dataHandler(this), errorHandler(this));
+
     if (connectionAccounting) {
       addConnection(this.id, this);
     }
   }
 
-  setSocketTimeout(value) {
-    if (this.socket) {
-      this.socket.setTimeout(value);
-    }
-  }
+  // setSocketTimeout(value) {
+  //   if (this.socket) {
+  //     this.socket.setTimeout(value);
+  //   }
+  // }
 
-  resetSocketTimeout() {
-    if (this.socket) {
-      this.socket.setTimeout(this.socketTimeout);
-    }
-  }
+  // resetSocketTimeout() {
+  //   if (this.socket) {
+  //     this.socket.setTimeout(this.socketTimeout);
+  //   }
+  // }
 
-  static enableConnectionAccounting(spy) {
+  static enableConnectionAccounting(spy: any): void {
     if (spy) {
       connectionAccountingSpy = spy;
     }
@@ -206,133 +258,127 @@ export class Connection extends EventEmitter {
     connections = {};
   }
 
-  static disableConnectionAccounting() {
+  static disableConnectionAccounting(): void {
     connectionAccounting = false;
     connectionAccountingSpy = undefined;
   }
 
-  static connections() {
+  static connections(): {[key:number]: Connection} {
     return connections;
   }
 
-  get address() {
+  get address(): string {
     return `${this.host}:${this.port}`;
   }
 
-  /**
-   * Unref this connection
-   * @method
-   * @return {boolean}
-   */
-  unref() {
-    if (this.socket == null) {
-      this.once('connect', () => this.socket.unref());
-      return;
-    }
+  // /**
+  //  * Unref this connection
+  //  * @method
+  //  * @return {boolean}
+  //  */
+  // unref() {
+  //   if (this.socket == null) {
+  //     this.once('connect', () => this.socket.unref());
+  //     return;
+  //   }
+  //
+  //   this.socket.unref();
+  // }
 
-    this.socket.unref();
-  }
+  /** Destroys a connection. */
+  destroy(/*options: {force: boolean}, callback*/): void {
+    // if (typeof options === 'function') {
+    //   callback = options;
+    //   options = {};
+    // }
 
-  /**
-   * Destroy connection
-   * @method
-   */
-  destroy(options, callback) {
-    if (typeof options === 'function') {
-      callback = options;
-      options = {};
-    }
-
-    options = Object.assign({ force: false }, options);
+    // options = Object.assign({ force: false }, options);
 
     if (connectionAccounting) {
       deleteConnection(this.id);
     }
 
-    if (this.socket == null) {
-      this.destroyed = true;
-      return;
+    if (!this.destroyed && this.conn) {
+      this.conn.close();
     }
 
-    if (options.force) {
-      this.socket.destroy();
-      this.destroyed = true;
-      if (typeof callback === 'function') callback(null, null);
-      return;
-    }
+    this.destroyed = true;
 
-    this.socket.end(err => {
-      this.destroyed = true;
-      if (typeof callback === 'function') callback(err, null);
-    });
+    // if (options.force) {
+    //   this.socket.destroy();
+    //   this.destroyed = true;
+    //   if (typeof callback === 'function') callback(null, null);
+    //   return;
+    // }
+    //
+    // this.socket.end(err => {
+    //   this.destroyed = true;
+    //   if (typeof callback === 'function') callback(err, null);
+    // });
   }
 
-  /**
-   * Write to connection
-   * @method
-   * @param {Command} command Command to write out need to implement toBin and toBinUnified
-   */
-  write(buffer) {
+  /** Writes one or multiple buffers to a connection. */
+  async write(buf: Uint8Array | Uint8Array[]): Promise<number> {
+    // Maybe concat bufs
+   const b: Uint8Array = Array.isArray(buf) ? concat(buf): buf
+    // if (Array.isArray(buf)) {
+    //   b = concat(buf)
+    // } else {
+    //   b = buf
+    // }
+
     // Debug Log
-    if (this.logger.isDebug()) {
-      if (!Array.isArray(buffer)) {
-        this.logger.debug(`writing buffer [${buffer.toString('hex')}] to ${this.address}`);
-      } else {
-        for (let i = 0; i < buffer.length; i++)
-          this.logger.debug(`writing buffer [${buffer[i].toString('hex')}] to ${this.address}`);
-      }
+    if (this.logger.isDebug() && !this.destroyed) {
+      this.logger.debug(`writing buffer [${decode(b, "hex")}] to ${this.address}`);
+      // if (!Array.isArray(buf)) {
+      //   this.logger.debug(`writing buffer [${decode(buf, "hex")}] to ${this.address}`);
+      // } else {
+      //   for (const b of buf)
+      //     {this.logger.debug(`writing buffer [${decode(b, "hex")}] to ${this.address}`);}
+      // }
     }
 
     // Double check that the connection is not destroyed
-    if (this.socket.destroyed === false) {
-      // Write out the command
-      if (!Array.isArray(buffer)) {
-        this.socket.write(buffer, 'binary');
-        return true;
-      }
-
-      // Iterate over all buffers and write them in order to the socket
-      for (let i = 0; i < buffer.length; i++) {
-        this.socket.write(buffer[i], 'binary');
-      }
-
-      return true;
-    }
-
-    // Connection is destroyed return write failed
-    return false;
+    return this.destroyed ? 0 : this.conn.write(b)
+    // if (!this.destroyed) {
+    //   // Write out the command
+    //   return this.conn.write(b)
+    //
+    //   // if (!Array.isArray(b)) {
+    //     // this.socket.write(buffer, 'binary');
+    //     // return true;
+    //   // }
+    //
+    //   // // Iterate over all buffers and write them in order to the socket
+    //   // for (let i = 0; i < buffer.length; i++) {
+    //   //   this.socket.write(buffer[i], 'binary');
+    //   // }
+    //
+    //   // return true;
+    // }
+    //
+    // // Connection is destroyed return write failed
+    // return 0;
   }
 
-  /**
-   * Return id of connection as a string
-   * @method
-   * @return {string}
-   */
-  toString() {
-    return '' + this.id;
+  /** Connection id as string. */
+  toString(): string {
+    return `${this.id}`;
   }
 
-  /**
-   * Return json object of connection
-   * @method
-   * @return {object}
-   */
-  toJSON() {
+  /** JSON representation of a connection. */
+  toJSON(): { id: number, host: string, port: number } {
     return { id: this.id, host: this.host, port: this.port };
   }
 
-  /**
-   * Is the connection connected
-   * @method
-   * @return {boolean}
-   */
-  isConnected() {
-    if (this.destroyed) return false;
-    return !this.socket.destroyed && this.socket.writable;
+  /** Whether a connection is connected to its remoteAddress. */
+  isConnected(): boolean {
+    if (this.destroyed) {return false;}
+    return !this.conn.destroyed// && this.socket.writable;
   }
 }
 
-function deleteConnection(id) {
+function deleteConnection(id: number): void {
   // console.log("=== deleted connection " + id + " :: " + (connections[id] ? connections[id].port : ''))
   delete connections[id];
 
@@ -341,7 +387,7 @@ function deleteConnection(id) {
   }
 }
 
-function addConnection(id, connection) {
+function addConnection(id: number, connection: Connection): void {
   // console.log("=== added connection " + id + " :: " + connection.port)
   connections[id] = connection;
 
@@ -350,55 +396,54 @@ function addConnection(id, connection) {
   }
 }
 
-//
 // Connection handlers
-function errorHandler(conn) {
-  return function(err) {
-    if (connectionAccounting) deleteConnection(conn.id);
-    // Debug information
-    if (conn.logger.isDebug()) {
-      conn.logger.debug(
-        `connection ${conn.id} for [${conn.address}] errored out with [${JSON.stringify(err)}]`
+function errorHandler(connection: Connection): (err?: Error) => void  {
+  return (err?: Error): void => {
+    if (connectionAccounting){ deleteConnection(connection.id);}
+
+    if (connection.logger.isDebug()) {
+      connection.logger.debug(
+        `connection ${connection.id} for [${connection.address}] errored out with [${JSON.stringify(err)}]`
       );
     }
 
-    conn.emit('error', new MongoNetworkError(err), conn);
+    connection.emit('error', new MongoNetworkError(err), connection);
   };
 }
 
-function timeoutHandler(conn) {
-  return function() {
-    if (connectionAccounting) deleteConnection(conn.id);
-
-    if (conn.logger.isDebug()) {
-      conn.logger.debug(`connection ${conn.id} for [${conn.address}] timed out`);
-    }
-
-    conn.emit(
-      'timeout',
-      new MongoNetworkError(`connection ${conn.id} to ${conn.address} timed out`),
-      conn
-    );
-  };
-}
-
-function closeHandler(conn) {
-  return function(hadError) {
-    if (connectionAccounting) deleteConnection(conn.id);
-
-    if (conn.logger.isDebug()) {
-      conn.logger.debug(`connection ${conn.id} with for [${conn.address}] closed`);
-    }
-
-    if (!hadError) {
-      conn.emit(
-        'close',
-        new MongoNetworkError(`connection ${conn.id} to ${conn.address} closed`),
-        conn
-      );
-    }
-  };
-}
+// function timeoutHandler(conn) {
+//   return function() {
+//     if (connectionAccounting) deleteConnection(conn.id);
+//
+//     if (conn.logger.isDebug()) {
+//       conn.logger.debug(`connection ${conn.id} for [${conn.address}] timed out`);
+//     }
+//
+//     conn.emit(
+//       'timeout',
+//       new MongoNetworkError(`connection ${conn.id} to ${conn.address} timed out`),
+//       conn
+//     );
+//   };
+// }
+//
+// function closeHandler(conn) {
+//   return function(hadError) {
+//     if (connectionAccounting) deleteConnection(conn.id);
+//
+//     if (conn.logger.isDebug()) {
+//       conn.logger.debug(`connection ${conn.id} with for [${conn.address}] closed`);
+//     }
+//
+//     if (!hadError) {
+//       conn.emit(
+//         'close',
+//         new MongoNetworkError(`connection ${conn.id} to ${conn.address} closed`),
+//         conn
+//       );
+//     }
+//   };
+// }
 
 // Handle a message once it is received
 function processMessage(conn, message) {
