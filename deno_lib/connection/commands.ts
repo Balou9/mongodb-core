@@ -56,7 +56,7 @@ export interface QueryOptions {
 
 /** A class representation of a query. */
 export class Query {
-  readonly bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array };
+  // readonly bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array };
   readonly ns: string;
   readonly query: {[key:string]:any};
 
@@ -79,7 +79,7 @@ export class Query {
   partial: boolean
 
   /** Creates a new query. */
-  constructor(bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array }, ns: string, query: {[key:string]: any}, options: QueryOptions = {}) {
+  constructor(/*bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array },*/ ns: string, query: {[key:string]: any}, options: QueryOptions = {}) {
    // const self: Query = this;
     // Basic options needed to be passed in
     if (!ns) {throw new Error('ns must be specified for query');}
@@ -91,7 +91,7 @@ export class Query {
     }
 
     // Basic options
-    this.bson = bson;
+    // this.bson = bson;
     this.ns = ns;
     this.query = query;
 
@@ -195,7 +195,7 @@ export class Query {
     buffers.push(header);
 
     // Serialize the query
-  const query: Uint8Array = this.bson.serialize(this.query, {
+  const query: Uint8Array = BSON.serialize(this.query, {
       checkKeys: this.checkKeys,
       serializeFunctions: this.serializeFunctions
       // ignoreUndefined: this.ignoreUndefined
@@ -206,7 +206,7 @@ export class Query {
 
     if (this.returnFieldSelector && Object.keys(this.returnFieldSelector).length > 0) {
       // Serialize the projection document
-      projection = this.bson.serialize(this.returnFieldSelector, {
+      projection = BSON.serialize(this.returnFieldSelector, {
         checkKeys: this.checkKeys,
         serializeFunctions: this.serializeFunctions
         // ignoreUndefined: this.ignoreUndefined
@@ -486,7 +486,7 @@ export interface GetMoreOptions {
  }
 
 export class GetMore {
-  readonly bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array };
+  // readonly bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array };
   readonly ns: string;
   readonly cursorId: BSON.Long
 
@@ -494,8 +494,8 @@ export class GetMore {
   requestId: number;
 
   /** Creates a GetMore instance. */
-  constructor(bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array }, ns: string, cursorId: BSON.Long, options: GetMoreOptions = {}) {
-    this.bson = bson;
+  constructor(/*bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array },*/ ns: string, cursorId: BSON.Long, options: GetMoreOptions = {}) {
+    // this.bson = bson;
     this.ns = ns;
     this.cursorId = cursorId;
     this.numberToReturn = options.numberToReturn || 0;
@@ -672,14 +672,14 @@ export class GetMore {
  * KILLCURSOR
  **************************************************************/
 export class KillCursor {
-  readonly bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array };
+  // readonly bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array };
   readonly ns: string;
   readonly cursorIds: BSON.Long[]
 
   requestId: number;
 
   /** Creates a new KillCursor instance. */
-  constructor(bson: any, ns: string, cursorIds: BSON.Long[]) {
+  constructor(/*bson: any,*/ ns: string, cursorIds: BSON.Long[]) {
     this.ns = ns
     this.requestId = _requestId++;
     this.cursorIds = cursorIds;
@@ -854,7 +854,7 @@ export interface ResponseParseOptions {
 }
 
 export class Response {
-  readonly bson: { deserialize: (bson: Uint8Array, opts: BSON.DeserializationOptions) => Uint8Array };
+  // readonly bson: { deserialize: (bson: Uint8Array, opts: BSON.DeserializationOptions) => Uint8Array };
 
   raw: unknown;
   data: Uint8Array;
@@ -882,9 +882,9 @@ export class Response {
   index: number;
 
   /** Creates a response. */
-  constructor(bson: { deserialize: (bson: Uint8Array, opts: BSON.DeserializationOptions) => any}, message: unknown, msgHeader: { [key:string]:any}, msgBody: Uint8Array, options: ResponseOptions = { promoteValues: true}) {
+  constructor(/*bson: { deserialize: (bson: Uint8Array, opts: BSON.DeserializationOptions) => any},*/ message: unknown, msgHeader: { [key:string]:any}, msgBody: Uint8Array, options: ResponseOptions = { promoteValues: true}) {
     // opts = opts || { promoteLongs: true, promoteValues: true, promoteBuffers: false };
-    this.bson = bson;
+    // this.bson = bson;
     this.raw = message;
     this.data = msgBody;
     this.options = options;
@@ -962,7 +962,7 @@ export class Response {
       if (raw) {
         this.documents[i] = this.data.slice(this.index, this.index + bsonSize);
       } else {
-        this.documents[i] = this.bson.deserialize(
+        this.documents[i] = BSON.deserialize(
           this.data.slice(this.index, this.index + bsonSize),
           _options
         );
@@ -977,7 +977,7 @@ export class Response {
       fieldsAsRaw[documentsReturnedIn] = true;
       _options.fieldsAsRaw = fieldsAsRaw;
 
-      const doc: { [key:string]: any} = this.bson.deserialize(this.documents[0], _options);
+      const doc: { [key:string]: any} = BSON.deserialize(this.documents[0], _options);
       this.documents = [doc];
     }
 

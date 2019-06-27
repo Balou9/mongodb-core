@@ -7,7 +7,7 @@ import { encode, decode } from "https://denopkg.com/chiefbiiko/std-encoding/mod.
 // const debugOptions = require('./utils').debugOptions;
 import { debugOptions} from "./utils.ts";
 // const parseHeader = require('../wireprotocol/shared').parseHeader;
-import { parseHeader } from "./wureprotocol/shared.ts"
+import { parseHeader } from "./wireprotocol/shared.ts"
 // const decompress = require('../wireprotocol/compression').decompress;
 import { decompress } from "./../wireprotocol/compression.ts";
 // const Response = require('./commands').Response;
@@ -21,34 +21,9 @@ import { MongoError, MongoNetworkError} from "./../errors.ts"
 import { Logger } from "./logger.ts"
 import { OP_CODES, MESSAGE_HEADER_SIZE } from "./../wireprotocol/shared.ts"
 
+import { drain } from "https://denopkg.com/chiefbiiko/drain/mod.ts";
+
 function noop(): void {}
-
-/**
- * Performs non-blocking automatic reads, similar to push-based APIs, with the
- * ondata listener being called with every read data chunk.
- */
-function pullNonBlocking(
-  reader: Deno.Reader,
-  ondata: (chunk: Uint8Array) => any,
-  onerror?: (err: Error) => any
-): Promise<void> {
-  const it: AsyncIterableIterator<Uint8Array> = Deno.toAsyncIterator(reader);
-  let result: { done: boolean; value: Uint8Array };
-
-  return new Promise(
-    async (): Promise<void> => {
-      for (;;) {
-        result = await it.next();
-
-        if (result.done) {
-          break;
-        }
-
-        ondata(result.value);
-      }
-    }
-  ).catch(onerror || noop);
-}
 
 /** Concatenates given buffers. */
 function concat(bufs: Uint8Array[]): Uint8Array {
@@ -130,6 +105,7 @@ export class Connection extends EventEmitter {
   readonly keepAliveInitialDelay: number
   readonly connectionTimeout: number;
   readonly responseOptions: { [key:string]: any}
+  readonly cancelDrainage: (err: Error) => void
   readonly   conn: Deno.Conn
 
   flushing: boolean
@@ -138,6 +114,11 @@ export class Connection extends EventEmitter {
   destroyed: boolean
   hashedName: string
   workItems: unknown[]
+
+  bytesRead: number;
+  sizeOfMessage: number
+  buffer: Uint8Array
+  stubBuffer: Uint8Array
 
 
 
@@ -227,10 +208,10 @@ export class Connection extends EventEmitter {
     // this.conn.once('error', errorHandler(this));
     // this.conn.once('timeout', timeoutHandler(this));
     // this.conn.once('close', closeHandler(this));
-    this.conn.on('data', dataHandler(this));
+    // this.conn.on('data', dataHandler(this));
 
     // need to block with conn's pull-based API, isolate in micro-thread
-    pullNonBlocking(conn, dataHandler(this), errorHandler(this));
+    this.cancelDrainage = drain(conn, dataHandler(this), errorHandler(this), closeHandler(this));
 
     if (connectionAccounting) {
       addConnection(this.id, this);
@@ -427,200 +408,199 @@ function errorHandler(connection: Connection): (err?: Error) => void  {
 //   };
 // }
 //
-// function closeHandler(conn) {
-//   return function(hadError) {
-//     if (connectionAccounting) deleteConnection(conn.id);
-//
-//     if (conn.logger.isDebug()) {
-//       conn.logger.debug(`connection ${conn.id} with for [${conn.address}] closed`);
-//     }
-//
-//     if (!hadError) {
-//       conn.emit(
-//         'close',
-//         new MongoNetworkError(`connection ${conn.id} to ${conn.address} closed`),
-//         conn
-//       );
-//     }
-//   };
-// }
+function closeHandler(connection: Connection): () => void {
+  return (): void => {
+    if (connectionAccounting) {deleteConnection(connection.id);}
+
+    if (connection.logger.isDebug()) {
+      connection.logger.debug(`connection ${connection.id} with for [${connection.address}] closed`);
+    }
+
+    connection.emit(
+      'close',
+      new MongoNetworkError(`connection ${connection.id} to ${connection.address} closed`),
+      connection
+    );
+  };
+}
 
 // Handle a message once it is received
-function processMessage(conn, message) {
-  const msgHeader = parseHeader(message);
+function processMessage(connection: Connection, message: Uint8Array): void {
+  const msgHeader: unknown = parseHeader(message);
+
   if (msgHeader.opCode !== OP_COMPRESSED) {
     const ResponseConstructor = msgHeader.opCode === OP_MSG ? BinMsg : Response;
-    conn.emit(
+
+    return connection.emit(
       'message',
       new ResponseConstructor(
-        conn.bson,
+        // connection.bson,
         message,
         msgHeader,
         message.slice(MESSAGE_HEADER_SIZE),
-        conn.responseOptions
+        connection.responseOptions
       ),
-      conn
+      connection
     );
-
-    return;
   }
 
+  // TODO: de/compression
+  throw new Error("Decompression features are still unimplemented.")
+
   msgHeader.fromCompressed = true;
-  let index = MESSAGE_HEADER_SIZE;
+  let index: number = MESSAGE_HEADER_SIZE;
   msgHeader.opCode = message.readInt32LE(index);
   index += 4;
   msgHeader.length = message.readInt32LE(index);
   index += 4;
-  const compressorID = message[index];
+  const compressorID: number = message[index];
   index++;
 
   decompress(compressorID, message.slice(index), (err, decompressedMsgBody) => {
     if (err) {
-      conn.emit('error', err);
-      return;
+      return connection.emit('error', err);
     }
 
     if (decompressedMsgBody.length !== msgHeader.length) {
-      conn.emit(
+      return connection.emit(
         'error',
         new MongoError(
           'Decompressing a compressed message from the server failed. The message is corrupt.'
         )
       );
-
-      return;
     }
 
-    const ResponseConstructor = msgHeader.opCode === OP_MSG ? BinMsg : Response;
-    conn.emit(
+    const ResponseConstructor: (...args: any[]) => void = msgHeader.opCode === OP_MSG ? BinMsg : Response;
+
+    connection.emit(
       'message',
       new ResponseConstructor(
-        conn.bson,
+        // conn.bson,
         message,
         msgHeader,
         decompressedMsgBody,
-        conn.responseOptions
+        connection.responseOptions
       ),
-      conn
+      connection
     );
   });
 }
 
-function dataHandler(conn) {
-  return function(data) {
+function dataHandler(connection: Connection): (data: Uint8Array) => void {
+  return (data: Uint8Array): void => {
     // Parse until we are done with the data
     while (data.length > 0) {
       // If we still have bytes to read on the current message
-      if (conn.bytesRead > 0 && conn.sizeOfMessage > 0) {
+      if (connection.bytesRead > 0 && connection.sizeOfMessage > 0) {
         // Calculate the amount of remaining bytes
-        const remainingBytesToRead = conn.sizeOfMessage - conn.bytesRead;
+        const remainingBytesToRead = connection.sizeOfMessage - connection.bytesRead;
         // Check if the current chunk contains the rest of the message
         if (remainingBytesToRead > data.length) {
           // Copy the new data into the exiting buffer (should have been allocated when we know the message size)
-          data.copy(conn.buffer, conn.bytesRead);
+          data.copy(connection.buffer, connection.bytesRead);
           // Adjust the number of bytes read so it point to the correct index in the buffer
-          conn.bytesRead = conn.bytesRead + data.length;
+          connection.bytesRead = connection.bytesRead + data.length;
 
           // Reset state of buffer
-          data = Buffer.alloc(0);
+          data = new Uint8Array(0);
         } else {
           // Copy the missing part of the data into our current buffer
-          data.copy(conn.buffer, conn.bytesRead, 0, remainingBytesToRead);
+          data.copy(connection.buffer, connection.bytesRead, 0, remainingBytesToRead);
           // Slice the overflow into a new buffer that we will then re-parse
           data = data.slice(remainingBytesToRead);
 
           // Emit current complete message
-          const emitBuffer = conn.buffer;
+          const emitBuffer = connection.buffer;
           // Reset state of buffer
-          conn.buffer = null;
-          conn.sizeOfMessage = 0;
-          conn.bytesRead = 0;
-          conn.stubBuffer = null;
+          connection.buffer = null;
+          connection.sizeOfMessage = 0;
+          connection.bytesRead = 0;
+          connection.stubBuffer = null;
 
-          processMessage(conn, emitBuffer);
+          processMessage(connection, emitBuffer);
         }
       } else {
         // Stub buffer is kept in case we don't get enough bytes to determine the
         // size of the message (< 4 bytes)
-        if (conn.stubBuffer != null && conn.stubBuffer.length > 0) {
+        if (connection.stubBuffer != null && connection.stubBuffer.length > 0) {
           // If we have enough bytes to determine the message size let's do it
-          if (conn.stubBuffer.length + data.length > 4) {
+          if (connection.stubBuffer.length + data.length > 4) {
             // Prepad the data
-            const newData = Buffer.alloc(conn.stubBuffer.length + data.length);
-            conn.stubBuffer.copy(newData, 0);
-            data.copy(newData, conn.stubBuffer.length);
+            const newData = new Uint8Array(connection.stubBuffer.length + data.length);
+            connection.stubBuffer.copy(newData, 0);
+            data.copy(newData, connection.stubBuffer.length);
             // Reassign for parsing
             data = newData;
 
             // Reset state of buffer
-            conn.buffer = null;
-            conn.sizeOfMessage = 0;
-            conn.bytesRead = 0;
-            conn.stubBuffer = null;
+            connection.buffer = null;
+            connection.sizeOfMessage = 0;
+            connection.bytesRead = 0;
+            connection.stubBuffer = null;
           } else {
             // Add the the bytes to the stub buffer
-            const newStubBuffer = Buffer.alloc(conn.stubBuffer.length + data.length);
+            const newStubBuffer = new Uint8Array(connection.stubBuffer.length + data.length);
             // Copy existing stub buffer
-            conn.stubBuffer.copy(newStubBuffer, 0);
+            connection.stubBuffer.copy(newStubBuffer, 0);
             // Copy missing part of the data
-            data.copy(newStubBuffer, conn.stubBuffer.length);
+            data.copy(newStubBuffer, connection.stubBuffer.length);
             // Exit parsing loop
-            data = Buffer.alloc(0);
+            data = new Uint8Array(0);
           }
         } else {
           if (data.length > 4) {
             // Retrieve the message size
             const sizeOfMessage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
             // If we have a negative sizeOfMessage emit error and return
-            if (sizeOfMessage < 0 || sizeOfMessage > conn.maxBsonMessageSize) {
+            if (sizeOfMessage < 0 || sizeOfMessage > connection.maxBSONMessageSize) {
               const errorObject = {
                 err: 'socketHandler',
                 trace: '',
-                bin: conn.buffer,
+                bin: connection.buffer,
                 parseState: {
                   sizeOfMessage: sizeOfMessage,
-                  bytesRead: conn.bytesRead,
-                  stubBuffer: conn.stubBuffer
+                  bytesRead: connection.bytesRead,
+                  stubBuffer: connection.stubBuffer
                 }
               };
               // We got a parse Error fire it off then keep going
-              conn.emit('parseError', errorObject, conn);
+              connection.emit('parseError', errorObject, connection);
               return;
             }
 
             // Ensure that the size of message is larger than 0 and less than the max allowed
             if (
               sizeOfMessage > 4 &&
-              sizeOfMessage < conn.maxBsonMessageSize &&
+              sizeOfMessage < connection.maxBSONMessageSize &&
               sizeOfMessage > data.length
             ) {
-              conn.buffer = Buffer.alloc(sizeOfMessage);
+              connection.buffer = new Uint8Array(sizeOfMessage);
               // Copy all the data into the buffer
-              data.copy(conn.buffer, 0);
+              data.copy(connection.buffer, 0);
               // Update bytes read
-              conn.bytesRead = data.length;
+              connection.bytesRead = data.length;
               // Update sizeOfMessage
-              conn.sizeOfMessage = sizeOfMessage;
+              connection.sizeOfMessage = sizeOfMessage;
               // Ensure stub buffer is null
-              conn.stubBuffer = null;
+              connection.stubBuffer = null;
               // Exit parsing loop
-              data = Buffer.alloc(0);
+              data = new Uint8Array(0);
             } else if (
               sizeOfMessage > 4 &&
-              sizeOfMessage < conn.maxBsonMessageSize &&
+              sizeOfMessage < connection.maxBSONMessageSize &&
               sizeOfMessage === data.length
             ) {
               const emitBuffer = data;
               // Reset state of buffer
-              conn.buffer = null;
-              conn.sizeOfMessage = 0;
-              conn.bytesRead = 0;
-              conn.stubBuffer = null;
+              connection.buffer = null;
+              connection.sizeOfMessage = 0;
+              connection.bytesRead = 0;
+              connection.stubBuffer = null;
               // Exit parsing loop
-              data = Buffer.alloc(0);
+              data = new Uint8Array(0);
               // Emit the message
-              processMessage(conn, emitBuffer);
-            } else if (sizeOfMessage <= 4 || sizeOfMessage > conn.maxBsonMessageSize) {
+              processMessage(connection, emitBuffer);
+            } else if (sizeOfMessage <= 4 || sizeOfMessage > connection.maxBSONMessageSize) {
               const errorObject = {
                 err: 'socketHandler',
                 trace: null,
@@ -633,34 +613,34 @@ function dataHandler(conn) {
                 }
               };
               // We got a parse Error fire it off then keep going
-              conn.emit('parseError', errorObject, conn);
+              connection.emit('parseError', errorObject, connection);
 
               // Clear out the state of the parser
-              conn.buffer = null;
-              conn.sizeOfMessage = 0;
-              conn.bytesRead = 0;
-              conn.stubBuffer = null;
+              connection.buffer = null;
+              connection.sizeOfMessage = 0;
+              connection.bytesRead = 0;
+              connection.stubBuffer = null;
               // Exit parsing loop
-              data = Buffer.alloc(0);
+              data = new Uint8Array(0);
             } else {
               const emitBuffer = data.slice(0, sizeOfMessage);
               // Reset state of buffer
-              conn.buffer = null;
-              conn.sizeOfMessage = 0;
-              conn.bytesRead = 0;
-              conn.stubBuffer = null;
+              connection.buffer = null;
+              connection.sizeOfMessage = 0;
+              connection.bytesRead = 0;
+              connection.stubBuffer = null;
               // Copy rest of message
               data = data.slice(sizeOfMessage);
               // Emit the message
-              processMessage(conn, emitBuffer);
+              processMessage(connection, emitBuffer);
             }
           } else {
             // Create a buffer that contains the space for the non-complete message
-            conn.stubBuffer = Buffer.alloc(data.length);
+            connection.stubBuffer = new Uint8Array(data.length);
             // Copy the data to the stub buffer
-            data.copy(conn.stubBuffer, 0);
+            data.copy(connection.stubBuffer, 0);
             // Exit parsing loop
-            data = Buffer.alloc(0);
+            data = new Uint8Array(0);
           }
         }
       }

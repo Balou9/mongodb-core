@@ -2,7 +2,7 @@
 // const net = require('net');
 // const tls = require('tls');
 // const Connection = require('./connection');
-import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
+// import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
 // import { decode } from "https://denopkg.com/chiefbiiko/std-encoding/mod.ts";
 
 import { Connection } from "./connection.ts";
@@ -363,7 +363,7 @@ async function runCommand(connection: Connection, ns: string, command: { [key:st
     // if (typeof options === 'function') (callback = options), (options = {});
     const socketTimeout: number = typeof options.socketTimeout === 'number' ? options.socketTimeout : 360000;
     // const bson = conn.options.bson;
-    const query: Query = new Query(BSON, ns, command, {
+    const query: Query = new Query(ns, command, {
       numberToSkip: 0,
       numberToReturn: 1
     });
