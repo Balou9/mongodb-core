@@ -108,10 +108,7 @@ export function databaseNamespace(ns: string): string {
 }
 
 export function collectionNamespace(ns: string): string {
-  return ns
-    .split('.')
-    .slice(1)
-    .join('.');
+  return ns.split('.').slice(1).join('.');
 }
 
 // module.exports = {
