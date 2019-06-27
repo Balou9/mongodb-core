@@ -3,6 +3,11 @@
 // const crypto = require('crypto');
 // const requireOptional = require('require_optional');
 
+/** Reads a signed int from four little endian bytes starting at offset. */
+export function readInt32LE(buf: Uint8Array, offset: number): number {
+  return buf[offset] | buf[offset + 1] << 8 | buf[offset + 2] << 16 | buf[offset + 3] << 24
+}
+
 /** Gernerates a UUID v4. */
 export function uuidv4(): Uint8Array {
   const r: Uint8Array = crypto.getRandomValues(new Uint8Array(16));

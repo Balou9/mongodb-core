@@ -6,8 +6,8 @@ import { encode, decode } from "https://denopkg.com/chiefbiiko/std-encoding/mod.
 // const crypto = require('crypto');
 // const debugOptions = require('./utils').debugOptions;
 import { debugOptions} from "./utils.ts";
-// const parseHeader = require('../wireprotocol/shared').parseHeader;
-import { parseHeader } from "./wireprotocol/shared.ts"
+// const parseMessageHeader = require('../wireprotocol/shared').parseMessageHeader;
+import { MessageHeader, parseMessageHeader } from "./wireprotocol/shared.ts"
 // const decompress = require('../wireprotocol/compression').decompress;
 import { decompress } from "./../wireprotocol/compression.ts";
 // const Response = require('./commands').Response;
@@ -426,7 +426,7 @@ function closeHandler(connection: Connection): () => void {
 
 // Handle a message once it is received
 function processMessage(connection: Connection, message: Uint8Array): void {
-  const msgHeader: unknown = parseHeader(message);
+  const msgHeader: MessageHeader = parseMessageHeader(message);
 
   if (msgHeader.opCode !== OP_COMPRESSED) {
     const ResponseConstructor = msgHeader.opCode === OP_MSG ? BinMsg : Response;
@@ -489,28 +489,30 @@ function processMessage(connection: Connection, message: Uint8Array): void {
 function dataHandler(connection: Connection): (data: Uint8Array) => void {
   return (data: Uint8Array): void => {
     // Parse until we are done with the data
-    while (data.length > 0) {
+    while (data.byteLength > 0) {
       // If we still have bytes to read on the current message
       if (connection.bytesRead > 0 && connection.sizeOfMessage > 0) {
         // Calculate the amount of remaining bytes
-        const remainingBytesToRead = connection.sizeOfMessage - connection.bytesRead;
+        const remainingBytesToRead: number = connection.sizeOfMessage - connection.bytesRead;
         // Check if the current chunk contains the rest of the message
-        if (remainingBytesToRead > data.length) {
+        if (remainingBytesToRead > data.byteLength) {
           // Copy the new data into the exiting buffer (should have been allocated when we know the message size)
-          data.copy(connection.buffer, connection.bytesRead);
+          // data.copy(connection.buffer, connection.bytesRead);
+          connection.buffer.set(data, connection.bytesRead);
           // Adjust the number of bytes read so it point to the correct index in the buffer
-          connection.bytesRead = connection.bytesRead + data.length;
+          connection.bytesRead = connection.bytesRead + data.byteLength;
 
           // Reset state of buffer
           data = new Uint8Array(0);
         } else {
           // Copy the missing part of the data into our current buffer
-          data.copy(connection.buffer, connection.bytesRead, 0, remainingBytesToRead);
+          // data.copy(connection.buffer, connection.bytesRead, 0, remainingBytesToRead);
+          connection.buffer.set(data.subarray(0, remainingBytesToRead), connection.bytesRead);
           // Slice the overflow into a new buffer that we will then re-parse
           data = data.slice(remainingBytesToRead);
 
           // Emit current complete message
-          const emitBuffer = connection.buffer;
+          const emitBuffer: Uint8Array = connection.buffer;
           // Reset state of buffer
           connection.buffer = null;
           connection.sizeOfMessage = 0;
@@ -522,13 +524,15 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
       } else {
         // Stub buffer is kept in case we don't get enough bytes to determine the
         // size of the message (< 4 bytes)
-        if (connection.stubBuffer != null && connection.stubBuffer.length > 0) {
+        if (connection.stubBuffer != null && connection.stubBuffer.byteLength > 0) {
           // If we have enough bytes to determine the message size let's do it
-          if (connection.stubBuffer.length + data.length > 4) {
+          if (connection.stubBuffer.byteLength + data.byteLength > 4) {
             // Prepad the data
-            const newData = new Uint8Array(connection.stubBuffer.length + data.length);
-            connection.stubBuffer.copy(newData, 0);
-            data.copy(newData, connection.stubBuffer.length);
+            const newData: Uint8Array = new Uint8Array(connection.stubBuffer.byteLength + data.byteLength);
+            // connection.stubBuffer.copy(newData, 0);
+            newData.set(connection.stubBuffer, 0);
+            // data.copy(newData, connection.stubBuffer.length);
+            newData.set(data, connection.stubBuffer.byteLength);
             // Reassign for parsing
             data = newData;
 
@@ -539,21 +543,23 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
             connection.stubBuffer = null;
           } else {
             // Add the the bytes to the stub buffer
-            const newStubBuffer = new Uint8Array(connection.stubBuffer.length + data.length);
+            const newStubBuffer: Uint8Array = new Uint8Array(connection.stubBuffer.byteLength + data.byteLength);
             // Copy existing stub buffer
-            connection.stubBuffer.copy(newStubBuffer, 0);
+            // connection.stubBuffer.copy(newStubBuffer, 0);
+            newStubBuffer.set(connection.stubBuffer, 0);
             // Copy missing part of the data
-            data.copy(newStubBuffer, connection.stubBuffer.length);
+            // data.copy(newStubBuffer, connection.stubBuffer.byteLength);
+            newStubBuffer.set(data, connection.stubBuffer.byteLength);
             // Exit parsing loop
             data = new Uint8Array(0);
           }
         } else {
           if (data.length > 4) {
             // Retrieve the message size
-            const sizeOfMessage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+            const sizeOfMessage: number = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
             // If we have a negative sizeOfMessage emit error and return
             if (sizeOfMessage < 0 || sizeOfMessage > connection.maxBSONMessageSize) {
-              const errorObject = {
+              const errorObject: { [key:string]: any } = {
                 err: 'socketHandler',
                 trace: '',
                 bin: connection.buffer,
@@ -576,9 +582,10 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
             ) {
               connection.buffer = new Uint8Array(sizeOfMessage);
               // Copy all the data into the buffer
-              data.copy(connection.buffer, 0);
+              // data.copy(connection.buffer, 0);
+              connection.buffer.set(data, 0);
               // Update bytes read
-              connection.bytesRead = data.length;
+              connection.bytesRead = data.byteLength;
               // Update sizeOfMessage
               connection.sizeOfMessage = sizeOfMessage;
               // Ensure stub buffer is null
@@ -588,9 +595,9 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
             } else if (
               sizeOfMessage > 4 &&
               sizeOfMessage < connection.maxBSONMessageSize &&
-              sizeOfMessage === data.length
+              sizeOfMessage === data.byteLength
             ) {
-              const emitBuffer = data;
+              const emitBuffer: Uint8Array = data;
               // Reset state of buffer
               connection.buffer = null;
               connection.sizeOfMessage = 0;
@@ -601,7 +608,7 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
               // Emit the message
               processMessage(connection, emitBuffer);
             } else if (sizeOfMessage <= 4 || sizeOfMessage > connection.maxBSONMessageSize) {
-              const errorObject = {
+              const errorObject: {[key:string]: any} = {
                 err: 'socketHandler',
                 trace: null,
                 bin: data,
@@ -623,7 +630,7 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
               // Exit parsing loop
               data = new Uint8Array(0);
             } else {
-              const emitBuffer = data.slice(0, sizeOfMessage);
+              const emitBuffer: Uint8Array = data.slice(0, sizeOfMessage);
               // Reset state of buffer
               connection.buffer = null;
               connection.sizeOfMessage = 0;
@@ -638,7 +645,8 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
             // Create a buffer that contains the space for the non-complete message
             connection.stubBuffer = new Uint8Array(data.length);
             // Copy the data to the stub buffer
-            data.copy(connection.stubBuffer, 0);
+            // data.copy(connection.stubBuffer, 0);
+            connection.stubBuffer.set(data, 0);
             // Exit parsing loop
             data = new Uint8Array(0);
           }
@@ -648,46 +656,46 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
   };
 }
 
-/**
- * A server connect event, used to verify that the connection is up and running
- *
- * @event Connection#connect
- * @type {Connection}
- */
-
-/**
- * The server connection closed, all pool connections closed
- *
- * @event Connection#close
- * @type {Connection}
- */
-
-/**
- * The server connection caused an error, all pool connections closed
- *
- * @event Connection#error
- * @type {Connection}
- */
-
-/**
- * The server connection timed out, all pool connections closed
- *
- * @event Connection#timeout
- * @type {Connection}
- */
-
-/**
- * The driver experienced an invalid message, all pool connections closed
- *
- * @event Connection#parseError
- * @type {Connection}
- */
-
-/**
- * An event emitted each time the connection receives a parsed message from the wire
- *
- * @event Connection#message
- * @type {Connection}
- */
-
-module.exports = Connection;
+// /**
+//  * A server connect event, used to verify that the connection is up and running
+//  *
+//  * @event Connection#connect
+//  * @type {Connection}
+//  */
+// 
+// /**
+//  * The server connection closed, all pool connections closed
+//  *
+//  * @event Connection#close
+//  * @type {Connection}
+//  */
+// 
+// /**
+//  * The server connection caused an error, all pool connections closed
+//  *
+//  * @event Connection#error
+//  * @type {Connection}
+//  */
+// 
+// /**
+//  * The server connection timed out, all pool connections closed
+//  *
+//  * @event Connection#timeout
+//  * @type {Connection}
+//  */
+// 
+// /**
+//  * The driver experienced an invalid message, all pool connections closed
+//  *
+//  * @event Connection#parseError
+//  * @type {Connection}
+//  */
+// 
+// /**
+//  * An event emitted each time the connection receives a parsed message from the wire
+//  *
+//  * @event Connection#message
+//  * @type {Connection}
+//  */
+// 
+// module.exports = Connection;

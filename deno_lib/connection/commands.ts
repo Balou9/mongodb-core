@@ -8,22 +8,20 @@
 import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
 import { encode } from "https://denopkg.com/chiefbiiko/std-encoding/mod.ts";
 
+import { readInt32LE } from "./../utils.ts";
+
 /** Inefficient but hopefully correct string byte counter. */
 function byteLength(str: string, inputEncoding: string = "utf8"): number {
   return encode(str, inputEncoding).byteLength;
-}
-
-/** Reads a signed int from four little endian bytes starting at offset. */
-function readInt32LE(buf: Uint8Array, offset: number): number {
-  return buf[offset] | buf[offset + 1] << 8 | buf[offset + 2] << 16 | buf[offset + 3] << 24
 }
 
 // Incrementing request id
 let _requestId: number = 0;
 
 // Wire command operation ids
-// var opcodes = require('../wireprotocol/shared').opcodes;
-let opcodes = null // TODO
+// var OPCODES = require('../wireprotocol/shared').OPCODES;
+// let OPCODES = null // TODO
+import {OPCODES } from "./../wireprotocol/shared.ts";
 
 // Query flags
 const OPTS_TAILABLE_CURSOR: number = 2;
@@ -242,10 +240,10 @@ export class Query {
     index = index + 4;
 
     // Write header information OP_QUERY
-    header[index + 3] = (opcodes.OP_QUERY >> 24) & 0xff;
-    header[index + 2] = (opcodes.OP_QUERY >> 16) & 0xff;
-    header[index + 1] = (opcodes.OP_QUERY >> 8) & 0xff;
-    header[index] = opcodes.OP_QUERY & 0xff;
+    header[index + 3] = (OPCODES.OP_QUERY >> 24) & 0xff;
+    header[index + 2] = (OPCODES.OP_QUERY >> 16) & 0xff;
+    header[index + 1] = (OPCODES.OP_QUERY >> 8) & 0xff;
+    header[index] = OPCODES.OP_QUERY & 0xff;
     index = index + 4;
 
     // Write header information flags
@@ -439,10 +437,10 @@ export class Query {
 //   index = index + 4;
 //
 //   // Write header information OP_QUERY
-//   header[index + 3] = (opcodes.OP_QUERY >> 24) & 0xff;
-//   header[index + 2] = (opcodes.OP_QUERY >> 16) & 0xff;
-//   header[index + 1] = (opcodes.OP_QUERY >> 8) & 0xff;
-//   header[index] = opcodes.OP_QUERY & 0xff;
+//   header[index + 3] = (OPCODES.OP_QUERY >> 24) & 0xff;
+//   header[index + 2] = (OPCODES.OP_QUERY >> 16) & 0xff;
+//   header[index + 1] = (OPCODES.OP_QUERY >> 8) & 0xff;
+//   header[index] = OPCODES.OP_QUERY & 0xff;
 //   index = index + 4;
 //
 //   // Write header information flags
@@ -535,10 +533,10 @@ export class GetMore {
     index = index + 4;
 
     // index = write32bit(index, buf, OP_GETMORE);
-    buf[index + 3] = (opcodes.OP_GETMORE >> 24) & 0xff;
-    buf[index + 2] = (opcodes.OP_GETMORE >> 16) & 0xff;
-    buf[index + 1] = (opcodes.OP_GETMORE >> 8) & 0xff;
-    buf[index] = opcodes.OP_GETMORE & 0xff;
+    buf[index + 3] = (OPCODES.OP_GETMORE >> 24) & 0xff;
+    buf[index + 2] = (OPCODES.OP_GETMORE >> 16) & 0xff;
+    buf[index + 1] = (OPCODES.OP_GETMORE >> 8) & 0xff;
+    buf[index] = OPCODES.OP_GETMORE & 0xff;
     index = index + 4;
 
     // index = write32bit(index, buf, 0);
@@ -624,10 +622,10 @@ export class GetMore {
 //   index = index + 4;
 //
 //   // index = write32bit(index, _buffer, OP_GETMORE);
-//   _buffer[index + 3] = (opcodes.OP_GETMORE >> 24) & 0xff;
-//   _buffer[index + 2] = (opcodes.OP_GETMORE >> 16) & 0xff;
-//   _buffer[index + 1] = (opcodes.OP_GETMORE >> 8) & 0xff;
-//   _buffer[index] = opcodes.OP_GETMORE & 0xff;
+//   _buffer[index + 3] = (OPCODES.OP_GETMORE >> 24) & 0xff;
+//   _buffer[index + 2] = (OPCODES.OP_GETMORE >> 16) & 0xff;
+//   _buffer[index + 1] = (OPCODES.OP_GETMORE >> 8) & 0xff;
+//   _buffer[index] = OPCODES.OP_GETMORE & 0xff;
 //   index = index + 4;
 //
 //   // index = write32bit(index, _buffer, 0);
@@ -718,10 +716,10 @@ export class KillCursor {
     index = index + 4;
 
     // index = write32bit(index, buf, OP_KILL_CURSORS);
-    buf[index + 3] = (opcodes.OP_KILL_CURSORS >> 24) & 0xff;
-    buf[index + 2] = (opcodes.OP_KILL_CURSORS >> 16) & 0xff;
-    buf[index + 1] = (opcodes.OP_KILL_CURSORS >> 8) & 0xff;
-    buf[index] = opcodes.OP_KILL_CURSORS & 0xff;
+    buf[index + 3] = (OPCODES.OP_KILL_CURSORS >> 24) & 0xff;
+    buf[index + 2] = (OPCODES.OP_KILL_CURSORS >> 16) & 0xff;
+    buf[index + 1] = (OPCODES.OP_KILL_CURSORS >> 8) & 0xff;
+    buf[index] = OPCODES.OP_KILL_CURSORS & 0xff;
     index = index + 4;
 
     // index = write32bit(index, buf, 0);
@@ -800,10 +798,10 @@ export class KillCursor {
 //   index = index + 4;
 //
 //   // index = write32bit(index, _buffer, OP_KILL_CURSORS);
-//   _buffer[index + 3] = (opcodes.OP_KILL_CURSORS >> 24) & 0xff;
-//   _buffer[index + 2] = (opcodes.OP_KILL_CURSORS >> 16) & 0xff;
-//   _buffer[index + 1] = (opcodes.OP_KILL_CURSORS >> 8) & 0xff;
-//   _buffer[index] = opcodes.OP_KILL_CURSORS & 0xff;
+//   _buffer[index + 3] = (OPCODES.OP_KILL_CURSORS >> 24) & 0xff;
+//   _buffer[index + 2] = (OPCODES.OP_KILL_CURSORS >> 16) & 0xff;
+//   _buffer[index + 1] = (OPCODES.OP_KILL_CURSORS >> 8) & 0xff;
+//   _buffer[index] = OPCODES.OP_KILL_CURSORS & 0xff;
 //   index = index + 4;
 //
 //   // index = write32bit(index, _buffer, 0);
