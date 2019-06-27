@@ -6,8 +6,8 @@ import { encode, decode } from "https://denopkg.com/chiefbiiko/std-encoding/mod.
 // const crypto = require('crypto');
 // const debugOptions = require('./utils').debugOptions;
 import { debugOptions} from "./utils.ts";
-// const parseMessageHeader = require('../wireprotocol/shared').parseMessageHeader;
-import { MessageHeader, parseMessageHeader } from "./wireprotocol/shared.ts"
+// const parseMsgHeader = require('../wireprotocol/shared').parseMsgHeader;
+import { MsgHeader, parseMsgHeader } from "./wireprotocol/shared.ts"
 // const decompress = require('../wireprotocol/compression').decompress;
 import { decompress } from "./../wireprotocol/compression.ts";
 // const Response = require('./commands').Response;
@@ -426,7 +426,7 @@ function closeHandler(connection: Connection): () => void {
 
 // Handle a message once it is received
 function processMessage(connection: Connection, message: Uint8Array): void {
-  const msgHeader: MessageHeader = parseMessageHeader(message);
+  const msgHeader: MsgHeader = parseMsgHeader(message);
 
   if (msgHeader.opCode !== OP_COMPRESSED) {
     const ResponseConstructor = msgHeader.opCode === OP_MSG ? BinMsg : Response;

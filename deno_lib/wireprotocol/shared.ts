@@ -45,7 +45,7 @@ export function getReadPreference(cmd: unknown, options: {[key:string]: any}): R
   return readPreference;
 };
 
-export interface MessageHeader {
+export interface MsgHeader {
   length: number;
   requestId: number;
   responseTo: number;
@@ -53,7 +53,7 @@ export interface MessageHeader {
 }
 
 // Parses the header of a wire protocol message
-export function parseMessageHeader(message: Uint8Array): MessageHeader  {
+export function parseMsgHeader(message: Uint8Array): MsgHeader  {
   return {
     length: readInt32LE(message, 0),
     requestId: readInt32LE(message, 4),
@@ -116,7 +116,7 @@ export function collectionNamespace(ns: string): string {
 //   MESSAGE_HEADER_SIZE,
 //   COMPRESSION_DETAILS_SIZE,
 //   opcodes,
-//   parseMessageHeader,
+//   parseMsgHeader,
 //   applyCommonQueryOptions,
 //   isSharded,
 //   databaseNamespace,
