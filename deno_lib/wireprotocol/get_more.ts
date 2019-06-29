@@ -13,19 +13,19 @@ import { MongoError, MongoNetworkError } from "./../errors.ts"
 // const collectionNamespace = require('./shared').collectionNamespace;
 import { applyCommonQueryOptions, collectionNamespace} from "./shared.ts"
 // const maxWireVersion = require('../utils').maxWireVersion;
-import { maxWireVersion } from "./../utils.ts"
+import { Callback, maxWireVersion } from "./../utils.ts"
 // const applyCommonQueryOptions = require('./shared').applyCommonQueryOptions;
 // const command = require('./command');
 import { command } from "./command.ts"
 
-export function getMore(server: unknown, ns: string, cursorState: unknown, batchSize: number, options: {[key:string]: any} = {}, callback): Promise<void> {
+export function getMore(server: unknown, ns: string, cursorState: unknown, batchSize: number, options: {[key:string]: any} = {}, callback: Callback): void {
   // options = options || {};
 
   const wireVersion: number = maxWireVersion(server);
   
-  function queryResolved(result: unknown): void {
-    // if (err) return callback(err);
-    const response: unknown = result.message;
+  const queryCallback: Callback = (err?: Error, result: unknown): void => {
+    if (err) return callback(err);
+    const response = result.message;
 
     // If we have a timed out query or a cursor that was killed
     if (response.cursorNotFound) {
@@ -35,7 +35,7 @@ export function getMore(server: unknown, ns: string, cursorState: unknown, batch
     if (wireVersion < 4) {
       const cursorId: BSON.Long =
         typeof response.cursorId === 'number'
-          ? Long.fromNumber(response.cursorId)
+          ? BSON.Long.fromNumber(response.cursorId)
           : response.cursorId;
 
       cursorState.documents = response.documents;
@@ -51,9 +51,9 @@ export function getMore(server: unknown, ns: string, cursorState: unknown, batch
     }
 
     // Ensure we have a Long valid cursor id
-    const cursorId =
+    const cursorId: BSON.Long =
       typeof response.documents[0].cursor.id === 'number'
-        ? Long.fromNumber(response.documents[0].cursor.id)
+        ? BSON.Long.fromNumber(response.documents[0].cursor.id)
         : response.documents[0].cursor.id;
 
     cursorState.documents = response.documents[0].cursor.nextBatch;
@@ -64,15 +64,13 @@ export function getMore(server: unknown, ns: string, cursorState: unknown, batch
 
   if (wireVersion < 4) {
     // const bson = server.s.bson;
-    const getMoreOp: GetMore = new GetMore(/*bson, */ns, cursorState.cursorId, { numberToReturn: batchSize });
+    const getMoreOp: GetMore = new GetMore(bson, ns, cursorState.cursorId, { numberToReturn: batchSize });
     const queryOptions: {[key:string]: any} = applyCommonQueryOptions({}, cursorState);
-    // server.s.pool.write(getMoreOp, queryOptions, queryCallback);
-    const result: unknown = await server.s.pool.write(getMoreOp, queryOptions)
-    queryResolved(result);
+    return server.s.pool.write(getMoreOp, queryOptions, queryCallback);
     // return;
   }
 
-  const getMoreCmd: {[key:string]: any} = {
+  const getMoreCmd : {[key:string]: any}= {
     getMore: cursorState.cursorId,
     collection: collectionNamespace(ns),
     batchSize: Math.abs(batchSize)
@@ -88,9 +86,5 @@ export function getMore(server: unknown, ns: string, cursorState: unknown, batch
         ...options
       }
 
-  const result: unknown  = await command(server, ns, getMoreCmd, commandOptions);
-  
-  queryResolved(result)
+  command(server, ns, getMoreCmd, commandOptions, queryCallback);
 }
-
-// module.exports = getMore;
