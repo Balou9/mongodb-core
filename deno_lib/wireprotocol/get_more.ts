@@ -1,25 +1,31 @@
 // 'use strict';
 
+import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
 // const GetMore = require('../connection/commands').GetMore; GetMore 
 import { GetMore } from "./../connection/commands.ts"
 // const retrieveBSON = require('../connection/utils').retrieveBSON;
-import {}
-const MongoError = require('../error').MongoError;
-const MongoNetworkError = require('../error').MongoNetworkError;
-const BSON = retrieveBSON();
-const Long = BSON.Long;
-const collectionNamespace = require('./shared').collectionNamespace;
-const maxWireVersion = require('../utils').maxWireVersion;
-const applyCommonQueryOptions = require('./shared').applyCommonQueryOptions;
-const command = require('./command');
+// import { retrieveBSON} from "./../connection/utils.ts"
+// const MongoError = require('../error').MongoError;
+import { MongoError, MongoNetworkError } from "./../errors.ts"
+// const MongoNetworkError = require('../error').MongoNetworkError;
+// const BSON = retrieveBSON();
+// const Long = BSON.Long;
+// const collectionNamespace = require('./shared').collectionNamespace;
+import { applyCommonQueryOptions, collectionNamespace} from "./shared.ts"
+// const maxWireVersion = require('../utils').maxWireVersion;
+import { maxWireVersion } from "./../utils.ts"
+// const applyCommonQueryOptions = require('./shared').applyCommonQueryOptions;
+// const command = require('./command');
+import { command } from "./command.ts"
 
-function getMore(server, ns, cursorState, batchSize, options, callback) {
-  options = options || {};
+export function getMore(server: unknown, ns: string, cursorState: unknown, batchSize: number, options: {[key:string]: any} = {}, callback): Promise<void> {
+  // options = options || {};
 
-  const wireVersion = maxWireVersion(server);
-  function queryCallback(err, result) {
-    if (err) return callback(err);
-    const response = result.message;
+  const wireVersion: number = maxWireVersion(server);
+  
+  function queryResolved(result: unknown): void {
+    // if (err) return callback(err);
+    const response: unknown = result.message;
 
     // If we have a timed out query or a cursor that was killed
     if (response.cursorNotFound) {
@@ -27,7 +33,7 @@ function getMore(server, ns, cursorState, batchSize, options, callback) {
     }
 
     if (wireVersion < 4) {
-      const cursorId =
+      const cursorId: BSON.Long =
         typeof response.cursorId === 'number'
           ? Long.fromNumber(response.cursorId)
           : response.cursorId;
@@ -57,14 +63,16 @@ function getMore(server, ns, cursorState, batchSize, options, callback) {
   }
 
   if (wireVersion < 4) {
-    const bson = server.s.bson;
-    const getMoreOp = new GetMore(bson, ns, cursorState.cursorId, { numberToReturn: batchSize });
-    const queryOptions = applyCommonQueryOptions({}, cursorState);
-    server.s.pool.write(getMoreOp, queryOptions, queryCallback);
-    return;
+    // const bson = server.s.bson;
+    const getMoreOp: GetMore = new GetMore(/*bson, */ns, cursorState.cursorId, { numberToReturn: batchSize });
+    const queryOptions: {[key:string]: any} = applyCommonQueryOptions({}, cursorState);
+    // server.s.pool.write(getMoreOp, queryOptions, queryCallback);
+    const result: unknown = await server.s.pool.write(getMoreOp, queryOptions)
+    queryResolved(result);
+    // return;
   }
 
-  const getMoreCmd = {
+  const getMoreCmd: {[key:string]: any} = {
     getMore: cursorState.cursorId,
     collection: collectionNamespace(ns),
     batchSize: Math.abs(batchSize)
@@ -74,15 +82,15 @@ function getMore(server, ns, cursorState, batchSize, options, callback) {
     getMoreCmd.maxTimeMS = cursorState.cmd.maxAwaitTimeMS;
   }
 
-  const commandOptions = Object.assign(
-    {
-      returnFieldSelector: null,
-      documentsReturnedIn: 'nextBatch'
-    },
-    options
-  );
+  const commandOptions: {[key:string]: any} =     {
+        returnFieldSelector: null,
+        documentsReturnedIn: 'nextBatch',
+        ...options
+      }
 
-  command(server, ns, getMoreCmd, commandOptions, queryCallback);
+  const result: unknown  = await command(server, ns, getMoreCmd, commandOptions);
+  
+  queryResolved(result)
 }
 
-module.exports = getMore;
+// module.exports = getMore;
