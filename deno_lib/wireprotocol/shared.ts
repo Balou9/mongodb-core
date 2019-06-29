@@ -50,6 +50,7 @@ export interface MsgHeader {
   requestId: number;
   responseTo: number;
   opCode: number;
+  fromCompressed?: boolean
 }
 
 // Parses the header of a wire protocol message

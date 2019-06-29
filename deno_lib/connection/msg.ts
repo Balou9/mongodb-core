@@ -29,12 +29,12 @@
 
 import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
 // const opcodes = require('../wireprotocol/shared').opcodes;
-import { OPCODES, databaseNamespace } from "./../wireprotocol/shared.ts";
+import { OPCODES, MsgHeader, databaseNamespace } from "./../wireprotocol/shared.ts";
 // const databaseNamespace = require('../wireprotocol/shared').databaseNamespace;
 // const ReadPreference = require('../topologies/read_preference');
 import { ReadPreference } from "./../topologies/read_preference.ts";
 import {MongoError} from "./../errors.ts";
-import { writeInt32LE, writeUint32LE} from "./../utils.ts"
+import { readInt32LE, writeInt32LE, writeUint32LE} from "./../utils.ts"
 
 // Incrementing request id
 let _requestId: number = 0;
@@ -55,14 +55,14 @@ export interface MsgOptions {
 
 /** A class representation of a message. */
 export class Msg {
+  readonly options: MsgOptions;
+readonly  requestId: number
   readonly ns: string;
   readonly command: {[key:string]: any};
-  // readonly options: MsgOptions;
-readonly  requestId: number
 
-  serializeFunctions: boolean;
-  checkKeys: boolean;
-  maxBSONSize: number;
+  // serializeFunctions: boolean;
+  // checkKeys: boolean;
+  // maxBSONSize: number;
   checksumPresent: boolean
   moreToCome: boolean
   exhaustAllowed: boolean
@@ -79,28 +79,28 @@ readonly  requestId: number
     this.command = command;
     this.command.$db = databaseNamespace(ns);
 
+    // Additional options
+    this.requestId = Msg.getRequestId();
+
     if (options.readPreference && options.readPreference.mode !== ReadPreference.PRIMARY) {
       this.command.$readPreference = options.readPreference.toJSON();
     }
 
     // Ensure empty options
-    // this.options = options || {};
-
-    // Additional options
-    this.requestId = Msg.getRequestId();
-
-    // Serialization option
-    this.serializeFunctions =
-      typeof options.serializeFunctions === 'boolean' ? options.serializeFunctions : false;
-    // this.ignoreUndefined =
-    //   typeof options.ignoreUndefined === 'boolean' ? options.ignoreUndefined : false;
-    this.checkKeys = typeof options.checkKeys === 'boolean' ? options.checkKeys : false;
-    this.maxBSONSize = options.maxBSONSize || 1024 * 1024 * 16;
-
+    this.options = {
+      // Serialization option
+      serializeFunctions:
+        typeof options.serializeFunctions === 'boolean' ? options.serializeFunctions : false,
+      // this.ignoreUndefined =
+      //   typeof options.ignoreUndefined === 'boolean' ? options.ignoreUndefined : false;
+      checkKeys : typeof options.checkKeys === 'boolean' ? options.checkKeys : false,
+      maxBSONSize : options.maxBSONSize || 1024 * 1024 * 16
+    };
+    
     // flags
-    this.checksumPresent = false;
-    this.moreToCome = options.moreToCome || false;
-    this.exhaustAllowed = false;
+    this.moreToCome = options.moreToCome || false,
+  this.checksumPresent = false
+    this.exhaustAllowed = false
   }
   
   /** Gets the next request id. */
@@ -161,8 +161,8 @@ readonly  requestId: number
   /** Serializes given document to BSON. */
   serializeBson(document: {[key:string]: any}): Uint8Array {
     return BSON.serialize(document, {
-      checkKeys: this.checkKeys,
-      serializeFunctions: this.serializeFunctions
+      checkKeys: this.options.checkKeys,
+      serializeFunctions: this.options.serializeFunctions
       // ,ignoreUndefined: this.ignoreUndefined
     });
   }
@@ -172,17 +172,43 @@ readonly  requestId: number
 //   return ++_requestId;
 // };
 
+/** Options for constructing a binary message. */
+export interface BinMsgOptions {
+  promoteValues?: boolean
+  
+}
+
 /** A class representation of a binary message. */
 class BinMsg {
+  readonly options: BinMsgOptions
+  readonly requestId: number
+  readonly raw: Uint8Array
+  readonly data: Uint8Array
+  readonly length: number
+  readonly responseTo: number
+  readonly opCode: number
+  readonly fromCompressed: boolean
+  readonly responseFlags: number
+  readonly checksumPresent: boolean
+  readonly moreToCome: boolean
+  readonly exhaustAllowed: boolean
+  readonly documents: any[]
+  
+  private parsed: boolean
   
   /** Creates a new bin msg. */
-  constructor(bson, message, msgHeader, msgBody, opts) {
-    opts = opts || { promoteLongs: true, promoteValues: true, promoteBuffers: false };
+  constructor(/*bson, */message: Uint8Array, msgHeader: MsgHeader, msgBody: Uint8Array, options: BinMsgOptions = {}) {
+    // opts = opts || { promoteLongs: true, promoteValues: true, promoteBuffers: false };
+    
+    this.options = {
+       promoteValues: typeof options.promoteValues === 'boolean' ? options.promoteValues : true
+    }
+    
     this.parsed = false;
     this.raw = message;
     this.data = msgBody;
-    this.bson = bson;
-    this.opts = opts;
+    // this.bson = bson;
+    // this.opts = opts;
 
     // Read the message header
     this.length = msgHeader.length;
@@ -192,18 +218,19 @@ class BinMsg {
     this.fromCompressed = msgHeader.fromCompressed;
 
     // Read response flags
-    this.responseFlags = msgBody.readInt32LE(0);
+    this.responseFlags = readInt32LE(msgBody, 0);
     this.checksumPresent = (this.responseFlags & OPTS_CHECKSUM_PRESENT) !== 0;
     this.moreToCome = (this.responseFlags & OPTS_MORE_TO_COME) !== 0;
     this.exhaustAllowed = (this.responseFlags & OPTS_EXHAUST_ALLOWED) !== 0;
-    this.promoteLongs = typeof opts.promoteLongs === 'boolean' ? opts.promoteLongs : true;
-    this.promoteValues = typeof opts.promoteValues === 'boolean' ? opts.promoteValues : true;
-    this.promoteBuffers = typeof opts.promoteBuffers === 'boolean' ? opts.promoteBuffers : false;
+    // this.promoteLongs = typeof opts.promoteLongs === 'boolean' ? opts.promoteLongs : true;
+    // this.promoteValues = typeof opts.promoteValues === 'boolean' ? opts.promoteValues : true;
+    // this.promoteBuffers = typeof opts.promoteBuffers === 'boolean' ? opts.promoteBuffers : false;
 
     this.documents = [];
   }
 
-  isParsed() {
+  /** Whether parse has been called on this binary message. */
+  isParsed(): boolean {
     return this.parsed;
   }
 
