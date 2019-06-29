@@ -17,16 +17,22 @@ import { isTransactionCommand } from "./../transactions.ts"
 // const applySession = require('../sessions').applySession;
 import { applySession} from "./../sessions.ts"
 
-export function command(server: unknown, ns: string, cmd: {[key:string]: any}, options:{[key:string]: any} = {}, callback: Callback): void {
+function noop(): void {}
+
+export function command(server: unknown, ns: string, cmd: {[key:string]: any}, options:any = {}, callback: Callback= noop): void {
     // if (typeof options === 'function') (callback = options), (options = {});
     // options = options || {};
+    if (typeof options === "function") {
+      callback = options as Callback
+      options = {}
+    }
 
     if (!cmd) {
       return callback(new MongoError(`command ${JSON.stringify(cmd)} does not return a cursor`));
     }
 
     // const bson = server.s.bson;
-    // const pool = server.s.pool;
+    // const pool:Pool = server.s.pool;
     const readPreference: ReadPreference = getReadPreference(cmd, options);
     const shouldUseOpMsg: boolean = supportsOpMsg(server);
     const session: Session = options.session;

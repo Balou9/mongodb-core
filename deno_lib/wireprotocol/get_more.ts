@@ -18,14 +18,20 @@ import { Callback, maxWireVersion } from "./../utils.ts"
 // const command = require('./command');
 import { command } from "./command.ts"
 
-export function getMore(server: unknown, ns: string, cursorState: unknown, batchSize: number, options: {[key:string]: any} = {}, callback: Callback): void {
+function noop(): void {}
+
+export function getMore(server: unknown, ns: string, cursorState: unknown, batchSize: number, options: any = {}, callback: Callback = noop): void {
+  if (typeof options === "function") {
+    callback = options as Callback
+    options = {}
+  }
   // options = options || {};
 
   const wireVersion: number = maxWireVersion(server);
   
   const queryCallback: Callback = (err?: Error, result: unknown): void => {
     if (err) return callback(err);
-    const response = result.message;
+    const response: unknown = result.message;
 
     // If we have a timed out query or a cursor that was killed
     if (response.cursorNotFound) {
