@@ -27,12 +27,14 @@
 //   [uint32     checksum;]
 // };
 
+import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
 // const opcodes = require('../wireprotocol/shared').opcodes;
-import { OPCODES, dataBaseNameSpace } from "./../wireprotocol/shared.ts";
+import { OPCODES, databaseNamespace } from "./../wireprotocol/shared.ts";
 // const databaseNamespace = require('../wireprotocol/shared').databaseNamespace;
 // const ReadPreference = require('../topologies/read_preference');
 import { ReadPreference } from "./../topologies/read_preference.ts";
 import {MongoError} from "./../errors.ts";
+import { writeInt32LE, writeUint32LE} from "./../utils.ts"
 
 // Incrementing request id
 let _requestId: number = 0;
@@ -42,12 +44,34 @@ const OPTS_CHECKSUM_PRESENT: number = 1;
 const OPTS_MORE_TO_COME: number = 2;
 const OPTS_EXHAUST_ALLOWED: number = 1 << 16;
 
-export interface MessageOptions
+/** Options for constructing a new message. */
+export interface MsgOptions {
+  readPreference?: ReadPreference;
+  serializeFunctions?: boolean
+  checkKeys?: boolean
+  maxBSONSize?: number
+  moreToCome?: boolean
+}
 
+/** A class representation of a message. */
 export class Msg {
-  constructor(/*bson, */ns: string, command: unknown, options:) {
-    // Basic options needed to be passed in
-    if (command == null){ throw new MongoError('query must be specified for query');}
+  readonly ns: string;
+  readonly command: {[key:string]: any};
+  // readonly options: MsgOptions;
+readonly  requestId: number
+
+  serializeFunctions: boolean;
+  checkKeys: boolean;
+  maxBSONSize: number;
+  checksumPresent: boolean
+  moreToCome: boolean
+  exhaustAllowed: boolean
+  
+  /** Creates a new msg. */
+  constructor(/*bson, */ns: string, command: {[key:string]: any}, options: MsgOptions = {}) {
+    // Not-null checks
+    if (!ns) { throw new MongoError("namespace must be provided")}
+    if (!command){ throw new MongoError('command must be specified for msg');}
 
     // Basic options
     // this.bson = bson;
@@ -60,7 +84,7 @@ export class Msg {
     }
 
     // Ensure empty options
-    this.options = options || {};
+    // this.options = options || {};
 
     // Additional options
     this.requestId = Msg.getRequestId();
@@ -68,20 +92,27 @@ export class Msg {
     // Serialization option
     this.serializeFunctions =
       typeof options.serializeFunctions === 'boolean' ? options.serializeFunctions : false;
-    this.ignoreUndefined =
-      typeof options.ignoreUndefined === 'boolean' ? options.ignoreUndefined : false;
+    // this.ignoreUndefined =
+    //   typeof options.ignoreUndefined === 'boolean' ? options.ignoreUndefined : false;
     this.checkKeys = typeof options.checkKeys === 'boolean' ? options.checkKeys : false;
-    this.maxBsonSize = options.maxBsonSize || 1024 * 1024 * 16;
+    this.maxBSONSize = options.maxBSONSize || 1024 * 1024 * 16;
 
     // flags
     this.checksumPresent = false;
     this.moreToCome = options.moreToCome || false;
     this.exhaustAllowed = false;
   }
+  
+  /** Gets the next request id. */
+  static getRequestId(): number {
+    return ++_requestId;
+  }
 
-  toBin() {
-    const buffers = [];
-    let flags = 0;
+  /** Creates an array of buffers. */
+  toBin(): Uint8Array[] {
+    const buffers: Uint8Array[] = [];
+    
+    let flags: number = 0;
 
     if (this.checksumPresent) {
       flags |= OPTS_CHECKSUM_PRESENT;
@@ -95,50 +126,56 @@ export class Msg {
       flags |= OPTS_EXHAUST_ALLOWED;
     }
 
-    const header = new Buffer(
+    const header: Uint8Array = new Uint8Array(
       4 * 4 + // Header
         4 // Flags
     );
 
     buffers.push(header);
 
-    let totalLength = header.length;
-    const command = this.command;
-    totalLength += this.makeDocumentSegment(buffers, command);
+    let totalLength: number = header.length;
+    // const command: {[key:string]: any} = this.command;
+    totalLength += this.makeDocumentSegment(buffers, this.command);
 
-    header.writeInt32LE(totalLength, 0); // messageLength
-    header.writeInt32LE(this.requestId, 4); // requestID
-    header.writeInt32LE(0, 8); // responseTo
-    header.writeInt32LE(opcodes.OP_MSG, 12); // opCode
-    header.writeUInt32LE(flags, 16); // flags
+    writeInt32LE(header, totalLength, 0); // messageLength
+    writeInt32LE(header, this.requestId, 4); // requestID
+    writeInt32LE(header, 0, 8); // responseTo
+    writeInt32LE(header, OPCODES.OP_MSG, 12); // opCode
+    writeUint32LE(header, flags, 16); // flags
+    
     return buffers;
   }
 
-  makeDocumentSegment(buffers, document) {
-    const payloadTypeBuffer = new Buffer(1);
-    payloadTypeBuffer[0] = 0;
+  /** Pushes a document segment into the buffers array. */
+  makeDocumentSegment(buffers: Uint8Array[], document: {[key:string]: any}): number {
+    const payloadTypeBuffer: Uint8Array = new Uint8Array(1);
+    // payloadTypeBuffer[0] = 0;
 
-    const documentBuffer = this.serializeBson(document);
+    const documentBuffer: Uint8Array = this.serializeBson(document);
     buffers.push(payloadTypeBuffer);
     buffers.push(documentBuffer);
 
     return payloadTypeBuffer.length + documentBuffer.length;
   }
 
-  serializeBson(document) {
-    return this.bson.serialize(document, {
+  /** Serializes given document to BSON. */
+  serializeBson(document: {[key:string]: any}): Uint8Array {
+    return BSON.serialize(document, {
       checkKeys: this.checkKeys,
-      serializeFunctions: this.serializeFunctions,
-      ignoreUndefined: this.ignoreUndefined
+      serializeFunctions: this.serializeFunctions
+      // ,ignoreUndefined: this.ignoreUndefined
     });
   }
 }
 
-Msg.getRequestId = function() {
-  return ++_requestId;
-};
+// Msg.getRequestId = function() {
+//   return ++_requestId;
+// };
 
+/** A class representation of a binary message. */
 class BinMsg {
+  
+  /** Creates a new bin msg. */
   constructor(bson, message, msgHeader, msgBody, opts) {
     opts = opts || { promoteLongs: true, promoteValues: true, promoteBuffers: false };
     this.parsed = false;

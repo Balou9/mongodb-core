@@ -104,11 +104,11 @@ export function isSharded(topologyOrServer: unknown): boolean {
 }
 
 export function databaseNamespace(ns: string): string {
-  return ns.split('.')[0];
+  return ns ? ns.split('.')[0] : "";
 }
 
 export function collectionNamespace(ns: string): string {
-  return ns.split('.').slice(1).join('.');
+  return ns ? ns.split('.').slice(1).join('.') : "";
 }
 
 // module.exports = {

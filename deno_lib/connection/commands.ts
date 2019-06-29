@@ -49,7 +49,7 @@ export interface QueryOptions {
   slaveOk?: boolean
   maxBSONSize?: number;
   returnFieldSelector?:  {[key:string]:any};
-  pre32Limit?: unknown;
+  // pre32Limit?: unknown;
 }
 
 /** A class representation of a query. */
@@ -57,12 +57,12 @@ export class Query {
   // readonly bson: { serialize: (obj: any, opts: BSON.SerializationOptions) => Uint8Array };
   readonly ns: string;
   readonly query: {[key:string]:any};
+    readonly requestId: number;
 
   numberToSkip:number
   numberToReturn: number
   returnFieldSelector: {[key:string]:any};
-  requestId: number;
-  pre32Limit: unknown;
+  // pre32Limit: unknown;
   serializeFunctions: boolean;
   maxBSONSize: number;
   checkKeys: boolean;
@@ -92,15 +92,15 @@ export class Query {
     // this.bson = bson;
     this.ns = ns;
     this.query = query;
-
+    this.requestId = Query.getRequestId();
+    
     // Additional options
     this.numberToSkip = options.numberToSkip || 0;
     this.numberToReturn = options.numberToReturn || 0;
     this.returnFieldSelector = options.returnFieldSelector || null;
-    this.requestId = Query.getRequestId();
 
     // special case for pre-3.2 find commands, delete ASAP
-    this.pre32Limit = options.pre32Limit;
+    // this.pre32Limit = options.pre32Limit;
 
     // Serialization option
     this.serializeFunctions =

@@ -4,8 +4,30 @@
 // const requireOptional = require('require_optional');
 
 /** Reads a signed int from four little endian bytes starting at offset. */
-export function readInt32LE(buf: Uint8Array, offset: number): number {
+export function readInt32LE(buf: Uint8Array, offset: number = 0): number {
   return buf[offset] | buf[offset + 1] << 8 | buf[offset + 2] << 16 | buf[offset + 3] << 24
+}
+
+/** Writes an unsigned int to four little endian bytes starting at offset. */
+export function writeUint32LE(buf: Uint8Array,int: number, offset: number = 0): number {
+  // return buf[offset] | buf[offset + 1] << 8 | buf[offset + 2] << 16 | buf[offset + 3] << 24
+  buf[offset] = int & 0xff
+  buf[offset + 1] = int >> 8 & 0xff;
+  buf[offset + 2] = int >> 16 & 0xff
+  buf[offset + 3] = int >> 24 & 0xff
+  
+  return buf.byteLength;
+}
+
+/** Writes a signed int to four little endian bytes starting at offset. */
+export function writeInt32LE(buf: Uint8Array,int: number, offset: number = 0): number {
+  // return buf[offset] | buf[offset + 1] << 8 | buf[offset + 2] << 16 | buf[offset + 3] << 24
+  buf[offset] = int
+  buf[offset + 1] = int >> 8
+  buf[offset + 2] = int >> 16 
+  buf[offset + 3] = int >> 24 
+  
+  return buf.byteLength;
 }
 
 /** Gernerates a UUID v4. */
