@@ -1,4 +1,4 @@
-'use strict';
+// 'use strict';
 
 // Implementation of OP_MSG spec:
 // https://github.com/mongodb/specifications/blob/master/source/message/OP_MSG.rst
@@ -34,7 +34,7 @@ import { OPCODES, MsgHeader, databaseNamespace } from "./../wireprotocol/shared.
 // const ReadPreference = require('../topologies/read_preference');
 import { ReadPreference } from "./../topologies/read_preference.ts";
 import {MongoError} from "./../errors.ts";
-import { readInt32LE, writeInt32LE, writeUint32LE} from "./../utils.ts"
+import {readUint8, readInt32LE, readUint32LE,  writeInt32LE, writeUint32LE} from "./../utils.ts"
 
 // Incrementing request id
 let _requestId: number = 0;
@@ -179,7 +179,7 @@ export interface BinMsgOptions {
 }
 
 /** A class representation of a binary message. */
-class BinMsg {
+export class BinMsg {
   readonly options: BinMsgOptions
   readonly requestId: number
   readonly raw: Uint8Array
@@ -192,9 +192,11 @@ class BinMsg {
   readonly checksumPresent: boolean
   readonly moreToCome: boolean
   readonly exhaustAllowed: boolean
-  readonly documents: any[]
   
-  private parsed: boolean
+  private _documents: any[]
+  private _parsed: boolean
+  
+  index: number
   
   /** Creates a new bin msg. */
   constructor(/*bson, */message: Uint8Array, msgHeader: MsgHeader, msgBody: Uint8Array, options: BinMsgOptions = {}) {
@@ -204,7 +206,7 @@ class BinMsg {
        promoteValues: typeof options.promoteValues === 'boolean' ? options.promoteValues : true
     }
     
-    this.parsed = false;
+    this._parsed = false;
     this.raw = message;
     this.data = msgBody;
     // this.bson = bson;
@@ -226,63 +228,71 @@ class BinMsg {
     // this.promoteValues = typeof opts.promoteValues === 'boolean' ? opts.promoteValues : true;
     // this.promoteBuffers = typeof opts.promoteBuffers === 'boolean' ? opts.promoteBuffers : false;
 
-    this.documents = [];
+    this._documents = [];
+  }
+
+  /** Get the documents parsed from a bin msg. */
+  get documents (): any[] {
+    return this._documents;
   }
 
   /** Whether parse has been called on this binary message. */
   isParsed(): boolean {
-    return this.parsed;
+    return this._parsed;
   }
 
-  parse(options) {
+  /** Parses a bin msg. */
+  parse(options : { promoteValues?: boolean ,raw?: boolean, documentsReturnedIn?: any}={}): void {
     // Don't parse again if not needed
-    if (this.parsed) return;
-    options = options || {};
+    if (this._parsed) {return;}
+    // options = options || {};
 
     this.index = 4;
     // Allow the return of raw documents instead of parsing
-    const raw = options.raw || false;
-    const documentsReturnedIn = options.documentsReturnedIn || null;
-    const promoteLongs =
-      typeof options.promoteLongs === 'boolean' ? options.promoteLongs : this.opts.promoteLongs;
-    const promoteValues =
-      typeof options.promoteValues === 'boolean' ? options.promoteValues : this.opts.promoteValues;
-    const promoteBuffers =
-      typeof options.promoteBuffers === 'boolean'
-        ? options.promoteBuffers
-        : this.opts.promoteBuffers;
+    const raw: boolean = options.raw || false;
+    const documentsReturnedIn: any = options.documentsReturnedIn || null;
+    // const promoteLongs =
+    //   typeof options.promoteLongs === 'boolean' ? options.promoteLongs : this.opts.promoteLongs;
+    const promoteValues: boolean =
+      typeof options.promoteValues === 'boolean' ? options.promoteValues : this.options.promoteValues;
+    // const promoteBuffers =
+    //   typeof options.promoteBuffers === 'boolean'
+    //     ? options.promoteBuffers
+    //     : this.opts.promoteBuffers;
 
     // Set up the options
-    const _options = {
-      promoteLongs: promoteLongs,
+    const _options: {[key:string]: any} = {
+      // promoteLongs: promoteLongs,
       promoteValues: promoteValues,
-      promoteBuffers: promoteBuffers
+      // promoteBuffers: promoteBuffers
     };
 
     while (this.index < this.data.length) {
-      const payloadType = this.data.readUInt8(this.index++);
+      const payloadType: number = readUint8( this.data, this.index++);
+      
       if (payloadType === 1) {
-        console.error('TYPE 1');
+        // console.error('TYPE 1');
+        // maybe warn or print debug info
       } else if (payloadType === 0) {
-        const bsonSize = this.data.readUInt32LE(this.index);
-        const bin = this.data.slice(this.index, this.index + bsonSize);
-        this.documents.push(raw ? bin : this.bson.deserialize(bin, _options));
+        const bsonSize: number = readUint32LE(this.data, this.index);
+        const bin: Uint8Array = this.data.slice(this.index, this.index + bsonSize);
+        this._documents.push(raw ? bin : BSON.deserialize(bin, _options));
 
         this.index += bsonSize;
       }
     }
 
-    if (this.documents.length === 1 && documentsReturnedIn != null && raw) {
-      const fieldsAsRaw = {};
-      fieldsAsRaw[documentsReturnedIn] = true;
-      _options.fieldsAsRaw = fieldsAsRaw;
+    if (this._documents.length === 1 && documentsReturnedIn != null && raw) {
+      // const fieldsAsRaw = {};
+      // fieldsAsRaw[documentsReturnedIn] = true;
+      _options.fieldsAsRaw = { [documentsReturnedIn]: true }//fieldsAsRaw;
 
-      const doc = this.bson.deserialize(this.documents[0], _options);
-      this.documents = [doc];
+      const doc: { [key:string]: any} = BSON.deserialize(this._documents[0], _options);
+      this._documents = [doc];
     }
 
-    this.parsed = true;
+    this._parsed = true;
   }
 }
 
-module.exports = { Msg, BinMsg };
+// module.exports = { Msg, BinMsg };

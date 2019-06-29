@@ -3,9 +3,10 @@
 // const crypto = require('crypto');
 // const requireOptional = require('require_optional');
 
-// export function readUint8(buf: Uint8Array, offset: number = 0): number {
-//   return buf[offset];
-// }
+/** Reads an unsigned byte from the buffer at given offset. */
+export function readUint8(buf: Uint8Array, offset: number = 0): number {
+  return buf[offset] & 0xff;
+}
 
 /** Reads a signed int from four little endian bytes starting at offset. */
 export function readInt32LE(buf: Uint8Array, offset: number = 0): number {
