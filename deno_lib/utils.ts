@@ -28,7 +28,7 @@ export function writeUint32LE(buf: Uint8Array,int: number, offset: number = 0): 
   buf[offset + 2] = int >> 16 & 0xff
   buf[offset + 3] = int >> 24 & 0xff
   
-  return buf.byteLength;
+  return buf.byteLength - offset;
 }
 
 /** Writes a signed int to four little endian bytes starting at offset. */
@@ -39,7 +39,7 @@ export function writeInt32LE(buf: Uint8Array,int: number, offset: number = 0): n
   buf[offset + 2] = int >> 16 
   buf[offset + 3] = int >> 24 
   
-  return buf.byteLength;
+  return buf.byteLength - offset;
 }
 
 /** Gernerates a UUID v4. */
