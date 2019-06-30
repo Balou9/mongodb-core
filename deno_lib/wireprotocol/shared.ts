@@ -9,11 +9,15 @@ import { TopologyDescription } from "./../sdam/topology_description.ts";
 
 import { readInt32LE } from "./../utils.ts";
 
+/** Message header size in bytes. */
 export const MESSAGE_HEADER_SIZE: number = 16;
+/** Compression details fragment size in bytes. */
 export const COMPRESSION_DETAILS_SIZE: number = 9; // originalOpcode + uncompressedSize, compressorID
 
-// OPCODE Numbers
-// Defined at https://docs.mongodb.com/manual/reference/mongodb-wire-protocol/#request-opcodes
+/**
+ * OPCODE numbers
+ * Defined at https://docs.mongodb.com/manual/reference/mongodb-wire-protocol/#request-opcodes
+ */
 export const OPCODES: {[key:string]: number} = {
   OP_REPLY: 1,
   OP_UPDATE: 2001,
@@ -26,6 +30,7 @@ export const OPCODES: {[key:string]: number} = {
   OP_MSG: 2013
 };
 
+/** Determines a command's read preference, fallback "primary". */
 export function getReadPreference(cmd: unknown, options: {[key:string]: any}): ReadPreference {
   // Default to command version of the readPreference
   let readPreference: ReadPreference = cmd.readPreference || new ReadPreference('primary');
@@ -45,6 +50,7 @@ export function getReadPreference(cmd: unknown, options: {[key:string]: any}): R
   return readPreference;
 };
 
+/** Wire protocol msg header. */
 export interface MsgHeader {
   length: number;
   requestId: number;
@@ -53,7 +59,7 @@ export interface MsgHeader {
   fromCompressed?: boolean
 }
 
-// Parses the header of a wire protocol message
+/** Parses the header of a wire protocol message. */
 export function parseMsgHeader(message: Uint8Array): MsgHeader  {
   return {
     length: readInt32LE(message, 0),
@@ -63,15 +69,17 @@ export function parseMsgHeader(message: Uint8Array): MsgHeader  {
   };
 };
 
+/** Applies common query options while merging given option documents. */
 export function applyCommonQueryOptions(queryOptions:{[key:string]: any}, options:{[key:string]: any}): {[key:string]: any} {
-  Object.assign(queryOptions, {
+  queryOptions = {
+    ...queryOptions,
     raw: typeof options.raw === 'boolean' ? options.raw : false,
     // promoteLongs: typeof options.promoteLongs === 'boolean' ? options.promoteLongs : true,
     promoteValues: typeof options.promoteValues === 'boolean' ? options.promoteValues : true,
     // promoteBuffers: typeof options.promoteBuffers === 'boolean' ? options.promoteBuffers : false,
     monitoring: typeof options.monitoring === 'boolean' ? options.monitoring : false,
     fullResult: typeof options.fullResult === 'boolean' ? options.fullResult : false
-  });
+  }
 
   if (typeof options.socketTimeout === 'number') {
     queryOptions.socketTimeout = options.socketTimeout;
@@ -88,6 +96,7 @@ export function applyCommonQueryOptions(queryOptions:{[key:string]: any}, option
   return queryOptions;
 }
 
+/** Is given topology or server sharded? */
 export function isSharded(topologyOrServer: unknown): boolean {
   if (topologyOrServer.type === 'mongos') return true;
   if (topologyOrServer.description && topologyOrServer.description.type === ServerType.Mongos) {
@@ -104,10 +113,12 @@ export function isSharded(topologyOrServer: unknown): boolean {
   return false;
 }
 
+/** Gets the database namespace from given string. */
 export function databaseNamespace(ns: string): string {
   return ns ? ns.split('.')[0] : "";
 }
 
+/** Gets the collection namespace from given string. */
 export function collectionNamespace(ns: string): string {
   return ns ? ns.split('.').slice(1).join('.') : "";
 }

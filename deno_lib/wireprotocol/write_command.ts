@@ -31,6 +31,7 @@ export function writeCommand(server: unknown, type: string, opsField: number | s
   const writeConcern: WriteConcern = options.writeConcern;
 
   const cmd: {[key:string]: any} = {};
+  
   cmd[type] = collectionNamespace(ns);
   cmd[opsField] = ops;
   cmd.ordered = ordered;
