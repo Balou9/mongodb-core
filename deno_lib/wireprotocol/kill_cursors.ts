@@ -11,9 +11,9 @@ import { collectionNamespace } from "./shared.ts"
 import {maxWireVersion} from "./../utils.ts"
 // const command = require('./command');
 import { command } from "./command.ts"
-import { Callback} from "./../utils.ts"
+import { Callback, noop } from "./../utils.ts"
 
-function noop(): void {}
+// function noop(): void {}
 
 export function killCursors(server: unknown, ns:string, cursorState: unknown, callback: Callback = noop): void {
   // callback = typeof callback === 'function' ? callback : () => {};

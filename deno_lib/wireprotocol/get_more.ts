@@ -13,12 +13,12 @@ import { MongoError, MongoNetworkError } from "./../errors.ts"
 // const collectionNamespace = require('./shared').collectionNamespace;
 import { applyCommonQueryOptions, collectionNamespace} from "./shared.ts"
 // const maxWireVersion = require('../utils').maxWireVersion;
-import { Callback, maxWireVersion } from "./../utils.ts"
+import { Callback, noop, maxWireVersion } from "./../utils.ts"
 // const applyCommonQueryOptions = require('./shared').applyCommonQueryOptions;
 // const command = require('./command');
 import { command } from "./command.ts"
 
-function noop(): void {}
+// function noop(): void {}
 
 export function getMore(server: unknown, ns: string, cursorState: unknown, batchSize: number, options: any = {}, callback: Callback = noop): void {
   if (typeof options === "function") {

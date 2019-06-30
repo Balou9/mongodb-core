@@ -6,7 +6,7 @@ import  { Query } from "./../connection/commands.ts"
 // const Msg = require('../connection/msg').Msg;
 import { Msg, BinMsg} from "./../connection/msg.ts"
 import { MongoError } from "./../errors.ts"
-import {Callback} from "./../utils.ts"
+import {Callback, noop} from "./../utils.ts"
 // const MongoError = require('../error').MongoError;
 // const getReadPreference = require('./shared').getReadPreference;
 import { getReadPreference, isSharded, databaseNamespace } from "./shared.ts"
@@ -17,7 +17,7 @@ import { isTransactionCommand } from "./../transactions.ts"
 // const applySession = require('../sessions').applySession;
 import { applySession} from "./../sessions.ts"
 
-function noop(): void {}
+// function noop(): void {}
 
 export function command(server: unknown, ns: string, cmd: {[key:string]: any}, options:any = {}, callback: Callback= noop): void {
     // if (typeof options === 'function') (callback = options), (options = {});
