@@ -11,7 +11,7 @@ import { MsgHeader, parseMsgHeader } from "./wireprotocol/shared.ts"
 // const decompress = require('../wireprotocol/compression').decompress;
 import { decompress } from "./../wireprotocol/compression.ts";
 // const Response = require('./commands').Response;
-import { Respone } from "./commands.ts"
+import { Response } from "./commands.ts"
 // const BinMsg = require('./msg').BinMsg;
 import {BinMsg} from "./msg.ts";
 // const MongoNetworkError = require('../error').MongoNetworkError;

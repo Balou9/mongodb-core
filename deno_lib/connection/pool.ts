@@ -136,7 +136,7 @@ function connectionFailureHandler(pool: Pool, event: string, err: Error, connect
 }
 
 function attemptReconnect(self: Pool): () => void {
-  return function() {
+  return ():void => {
     self.emit('attemptReconnect', self);
     if (self.state === DESTROYED || self.state === DESTROYING){ return;}
 
@@ -148,7 +148,7 @@ function attemptReconnect(self: Pool): () => void {
 
     self.connectingConnections++;
 
-    connect(self.options, (err?: Error, connection: Connection): void => {
+    connect(self.options, (err?: Error, connection?: Connection): void => {
       self.connectingConnections--;
 
       if (err) {
@@ -215,7 +215,7 @@ function moveConnectionBetween(connection: Connection, from: Connection[], to: C
 }
 
 function messageHandler(self: Pool): (message: BinMsg, connection: Connection) => void {
-  return function(message: BinMsg, connection: Connection): void {
+  return (message: BinMsg, connection: Connection): void => {
     // workItem to execute
     var workItem = null;
 
@@ -398,19 +398,33 @@ function serializeCommand(self: Pool, command: Msg, callback: Callback): void {
 
     // Create the msgHeader of OP_COMPRESSED
     const msgHeader: Uint8Array = new Uint8Array(MESSAGE_HEADER_SIZE);
+    
+     // messageLength
     writeInt32LE(msgHeader,
       MESSAGE_HEADER_SIZE + COMPRESSION_DETAILS_SIZE + compressedMessage.length,
       0
-    ); // messageLength
-    writeInt32LE(msgHeader,command.requestId, 4); // requestID
-    writeInt32LE(msgHeader,0, 8); // responseTo (zero)
-    writeInt32LE(msgHeader, OPCODES.OP_COMPRESSED, 12); // opCode
+    );
+    
+    // requestID
+    writeInt32LE(msgHeader,command.requestId, 4); 
+    
+     // responseTo (zero)
+    writeInt32LE(msgHeader,0, 8);
+    
+     // opCode
+    writeInt32LE(msgHeader, OPCODES.OP_COMPRESSED, 12);
 
     // Create the compression details of OP_COMPRESSED
     const compressionDetails = new Uint8Array(COMPRESSION_DETAILS_SIZE);
-    writeInt32LE(compressionDetails, originalCommandOpCode, 0); // originalOpcode
-    writeInt32LE(compressionDetails, messageToBeCompressed.length, 4); // Size of the uncompressed compressedMessage, excluding the MsgHeader
-    writeUint8(compressionDetails, compressorIDs[self.options.agreedCompressor], 8); // compressorID
+    
+    // originalOpcode
+    writeInt32LE(compressionDetails, originalCommandOpCode, 0); 
+    
+     // Size of the uncompressed compressedMessage, excluding the MsgHeader
+    writeInt32LE(compressionDetails, messageToBeCompressed.length, 4);
+    
+     // compressorID
+    writeUint8(compressionDetails, compressorIDs[self.options.agreedCompressor], 8);
 
     return callback(null, [msgHeader, compressionDetails, compressedMessage]);
   });
@@ -505,11 +519,13 @@ function flushMonitoringOperations(queue: unknown[]): void {
   }
 }
 
-function _execute(self) {
-  return function() {
-    if (self.state === DESTROYED) return;
+function _execute(self: Pool): () => void {
+  return (): void => {
+    if (self.state === DESTROYED) {return;}
+    
     // Already executing, skip
-    if (self.executing) return;
+    if (self.executing) {return;}
+    
     // Set pool as executing
     self.executing = true;
 
@@ -525,7 +541,7 @@ function _execute(self) {
     // eslint-disable-next-line
     while (true) {
       // Total availble connections
-      const totalConnections = totalConnectionCount(self);
+      const totalConnections: number = totalConnectionCount(self);
 
       // No available connections available, flush any monitoring ops
       if (self.availableConnections.length === 0) {
@@ -539,8 +555,8 @@ function _execute(self) {
         break;
       }
 
-      var connection = null;
-      const connections = self.availableConnections.filter(conn => conn.workItems.length === 0);
+      let connection = null;
+      const connections: Connection[] = self.availableConnections.filter(conn => conn.workItems.length === 0);
 
       // No connection found that has no work on it, just pick one for pipelining
       if (connections.length === 0) {
@@ -560,15 +576,15 @@ function _execute(self) {
       }
 
       // Get the next work item
-      var workItem = self.queue.shift();
+      const workItem: unknown = self.queue.shift();
 
       // If we are monitoring we need to use a connection that is not
       // running another operation to avoid socket timeout changes
       // affecting an existing operation
       if (workItem.monitoring) {
-        var foundValidConnection = false;
+        let foundValidConnection = false;
 
-        for (let i = 0; i < self.availableConnections.length; i++) {
+        for (let i: number = 0; i < self.availableConnections.length; i++) {
           // If the connection is connected
           // And there are no pending workItems on it
           // Then we can safely use it for monitoring.
@@ -595,7 +611,7 @@ function _execute(self) {
           }
 
           // Re-execute the operation
-          setTimeout(function() {
+          setTimeout((): void => {
             _execute(self)();
           }, 10);
 
@@ -618,7 +634,7 @@ function _execute(self) {
       }
 
       // Get actual binary commands
-      var buffer = workItem.buffer;
+      const buffer: unknown = workItem.buffer;
 
       // If we are monitoring take the connection of the availableConnections
       if (workItem.monitoring) {
@@ -637,11 +653,11 @@ function _execute(self) {
       }
 
       // Capture if write was successful
-      const writeSuccessful = true;
+      let writeSuccessful: boolean = true;
 
       // Put operation on the wire
       if (Array.isArray(buffer)) {
-        for (let i = 0; i < buffer.length; i++) {
+        for (let i: number = 0; i < buffer.length; i++) {
           writeSuccessful = connection.write(buffer[i]);
         }
       } else {
@@ -862,27 +878,434 @@ export class Pool extends EventEmitter {
     };
   }
 
-  /** Gets the size of apool. */
-  get size(): number {
-    return this.options.size;
-  }
+  // /** Gets the size of apool. */
+  // get size(): number {
+  //   return this.options.size;
+  // }
+  // 
+  // /** Gets the min size of a pool. */
+  // get minSize(): number {
+  //   return this.options.minSize;
+  // }
+  // 
+  // /** Gets the min size of a pool. */
+  // get connectionTimeout(): number {
+  //   return this.options.connectionTimeout;
+  // }
+  // 
+  // /** Gets the min size of a pool. */
+  // get socketTimeout(): number {
+  //   return this.options.socketTimeout;
+  // }
 
-  /** Gets the min size of a pool. */
-  get minSize(): number {
-    return this.options.minSize;
-  }
+  /**
+   * Return the total socket count in the pool.
+   * @method
+   * @return {Number} The number of socket available.
+   */
+  Pool.prototype.socketCount = function() {
+    return this.availableConnections.length + this.inUseConnections.length;
+    // + this.connectingConnections.length;
+  };
 
-  /** Gets the min size of a pool. */
-  get connectionTimeout(): number {
-    return this.options.connectionTimeout;
-  }
+  /**
+   * Return all pool connections
+   * @method
+   * @return {Connection[]} The pool connections
+   */
+  Pool.prototype.allConnections = function() {
+    return this.availableConnections.concat(this.inUseConnections);
+  };
 
-  /** Gets the min size of a pool. */
-  get socketTimeout(): number {
-    return this.options.socketTimeout;
-  }
+  /**
+   * Get a pool connection (round-robin)
+   * @method
+   * @return {Connection}
+   */
+  Pool.prototype.get = function() {
+    return this.allConnections()[0];
+  };
+
+  /**
+   * Is the pool connected
+   * @method
+   * @return {boolean}
+   */
+  Pool.prototype.isConnected = function() {
+    // We are in a destroyed state
+    if (this.state === DESTROYED || this.state === DESTROYING) {
+      return false;
+    }
+
+    // Get connections
+    var connections = this.availableConnections.concat(this.inUseConnections);
+
+    // Check if we have any connected connections
+    for (var i = 0; i < connections.length; i++) {
+      if (connections[i].isConnected()) return true;
+    }
+
+    // Not connected
+    return false;
+  };
+
+  /**
+   * Was the pool destroyed
+   * @method
+   * @return {boolean}
+   */
+  Pool.prototype.isDestroyed = function() {
+    return this.state === DESTROYED || this.state === DESTROYING;
+  };
+
+  /**
+   * Is the pool in a disconnected state
+   * @method
+   * @return {boolean}
+   */
+  Pool.prototype.isDisconnected = function() {
+    return this.state === DISCONNECTED;
+  };
+
+  /**
+   * Connect pool
+   */
+  Pool.prototype.connect = function() {
+    if (this.state !== DISCONNECTED) {
+      throw new MongoError('connection in unlawful state ' + this.state);
+    }
+
+    const self = this;
+    stateTransition(this, CONNECTING);
+
+    self.connectingConnections++;
+    connect(self.options, (err, connection) => {
+      self.connectingConnections--;
+
+      if (err) {
+        if (self.logger.isDebug()) {
+          self.logger.debug(`connection attempt failed with error [${JSON.stringify(err)}]`);
+        }
+
+        if (self.state === CONNECTING) {
+          self.emit('error', err);
+        }
+
+        return;
+      }
+
+      if (self.state === DESTROYED || self.state === DESTROYING) {
+        connection.destroy();
+        return self.destroy();
+      }
+
+      // attach event handlers
+      connection.on('error', self._connectionErrorHandler);
+      connection.on('close', self._connectionCloseHandler);
+      connection.on('timeout', self._connectionTimeoutHandler);
+      connection.on('parseError', self._connectionParseErrorHandler);
+      connection.on('message', self._messageHandler);
+
+      // If we are in a topology, delegate the auth to it
+      // This is to avoid issues where we would auth against an
+      // arbiter
+      if (self.options.inTopology) {
+        stateTransition(self, CONNECTED);
+        self.availableConnections.push(connection);
+        return self.emit('connect', self, connection);
+      }
+
+      if (self.state === DESTROYED || self.state === DESTROYING) {
+        return self.destroy();
+      }
+
+      if (err) {
+        self.destroy();
+        return self.emit('error', err);
+      }
+
+      stateTransition(self, CONNECTED);
+      self.availableConnections.push(connection);
+
+      if (self.minSize) {
+        for (let i = 0; i < self.minSize; i++) {
+          _createConnection(self);
+        }
+      }
+
+      self.emit('connect', self, connection);
+    });
+  };
+
+  /**
+   * Authenticate using a specified mechanism
+   * @param {authResultCallback} callback A callback function
+   */
+  Pool.prototype.auth = function(credentials, callback) {
+    if (typeof callback === 'function') callback(null, null);
+  };
+
+  /**
+   * Logout all users against a database
+   * @param {authResultCallback} callback A callback function
+   */
+  Pool.prototype.logout = function(dbName, callback) {
+    if (typeof callback === 'function') callback(null, null);
+  };
+
+  /**
+   * Unref the pool
+   * @method
+   */
+  Pool.prototype.unref = function() {
+    // Get all the known connections
+    var connections = this.availableConnections.concat(this.inUseConnections);
+
+    connections.forEach(function(c) {
+      c.unref();
+    });
+  };
 
 
+
+  /**
+   * Destroy pool
+   * @method
+   */
+  Pool.prototype.destroy = function(force, callback) {
+    var self = this;
+    // Do not try again if the pool is already dead
+    if (this.state === DESTROYED || self.state === DESTROYING) {
+      if (typeof callback === 'function') callback(null, null);
+      return;
+    }
+
+    // Set state to destroyed
+    stateTransition(this, DESTROYING);
+
+    // Are we force closing
+    if (force) {
+      // Get all the known connections
+      var connections = self.availableConnections.concat(self.inUseConnections);
+
+      // Flush any remaining work items with
+      // an error
+      while (self.queue.length > 0) {
+        var workItem = self.queue.shift();
+        if (typeof workItem.cb === 'function') {
+          workItem.cb(new MongoError('Pool was force destroyed'));
+        }
+      }
+
+      // Destroy the topology
+      return destroy(self, connections, { force: true }, callback);
+    }
+
+    // Clear out the reconnect if set
+    if (this.reconnectId) {
+      clearTimeout(this.reconnectId);
+    }
+
+    // If we have a reconnect connection running, close
+    // immediately
+    if (this.reconnectConnection) {
+      this.reconnectConnection.destroy();
+    }
+
+    // Wait for the operations to drain before we close the pool
+    function checkStatus() {
+      flushMonitoringOperations(self.queue);
+
+      if (self.queue.length === 0) {
+        // Get all the known connections
+        var connections = self.availableConnections.concat(self.inUseConnections);
+
+        // Check if we have any in flight operations
+        for (var i = 0; i < connections.length; i++) {
+          // There is an operation still in flight, reschedule a
+          // check waiting for it to drain
+          if (connections[i].workItems.length > 0) {
+            return setTimeout(checkStatus, 1);
+          }
+        }
+
+        destroy(self, connections, { force: false }, callback);
+        // } else if (self.queue.length > 0 && !this.reconnectId) {
+      } else {
+        // Ensure we empty the queue
+        _execute(self)();
+        // Set timeout
+        setTimeout(checkStatus, 1);
+      }
+    }
+
+    // Initiate drain of operations
+    checkStatus();
+  };
+
+  /**
+   * Reset all connections of this pool
+   *
+   * @param {function} [callback]
+   */
+  Pool.prototype.reset = function(callback) {
+    // this.destroy(true, err => {
+    //   if (err && typeof callback === 'function') {
+    //     callback(err, null);
+    //     return;
+    //   }
+
+    //   stateTransition(this, DISCONNECTED);
+    //   this.connect();
+
+    //   if (typeof callback === 'function') callback(null, null);
+    // });
+
+    if (typeof callback === 'function') callback();
+  };
+
+
+
+  /**
+   * Write a message to MongoDB
+   * @method
+   * @return {Connection}
+   */
+  Pool.prototype.write = function(command, options, cb) {
+    var self = this;
+    // Ensure we have a callback
+    if (typeof options === 'function') {
+      cb = options;
+    }
+
+    // Always have options
+    options = options || {};
+
+    // We need to have a callback function unless the message returns no response
+    if (!(typeof cb === 'function') && !options.noResponse) {
+      throw new MongoError('write method must provide a callback');
+    }
+
+    // Pool was destroyed error out
+    if (this.state === DESTROYED || this.state === DESTROYING) {
+      // Callback with an error
+      if (cb) {
+        try {
+          cb(new MongoError('pool destroyed'));
+        } catch (err) {
+          process.nextTick(function() {
+            throw err;
+          });
+        }
+      }
+
+      return;
+    }
+
+    if (this.options.domainsEnabled && process.domain && typeof cb === 'function') {
+      // if we have a domain bind to it
+      var oldCb = cb;
+      cb = process.domain.bind(function() {
+        // v8 - argumentsToArray one-liner
+        var args = new Array(arguments.length);
+        for (var i = 0; i < arguments.length; i++) {
+          args[i] = arguments[i];
+        }
+        // bounce off event loop so domain switch takes place
+        process.nextTick(function() {
+          oldCb.apply(null, args);
+        });
+      });
+    }
+
+    // Do we have an operation
+    var operation = {
+      cb: cb,
+      raw: false,
+      promoteLongs: true,
+      promoteValues: true,
+      promoteBuffers: false,
+      fullResult: false
+    };
+
+    // Set the options for the parsing
+    operation.promoteLongs = typeof options.promoteLongs === 'boolean' ? options.promoteLongs : true;
+    operation.promoteValues =
+      typeof options.promoteValues === 'boolean' ? options.promoteValues : true;
+    operation.promoteBuffers =
+      typeof options.promoteBuffers === 'boolean' ? options.promoteBuffers : false;
+    operation.raw = typeof options.raw === 'boolean' ? options.raw : false;
+    operation.immediateRelease =
+      typeof options.immediateRelease === 'boolean' ? options.immediateRelease : false;
+    operation.documentsReturnedIn = options.documentsReturnedIn;
+    operation.command = typeof options.command === 'boolean' ? options.command : false;
+    operation.fullResult = typeof options.fullResult === 'boolean' ? options.fullResult : false;
+    operation.noResponse = typeof options.noResponse === 'boolean' ? options.noResponse : false;
+    operation.session = options.session || null;
+
+    // Optional per operation socketTimeout
+    operation.socketTimeout = options.socketTimeout;
+    operation.monitoring = options.monitoring;
+    // Custom socket Timeout
+    if (options.socketTimeout) {
+      operation.socketTimeout = options.socketTimeout;
+    }
+
+    // Get the requestId
+    operation.requestId = command.requestId;
+
+    // If command monitoring is enabled we need to modify the callback here
+    if (self.options.monitorCommands) {
+      this.emit('commandStarted', new apm.CommandStartedEvent(this, command));
+
+      operation.started = process.hrtime();
+      operation.cb = (err, reply) => {
+        if (err) {
+          self.emit(
+            'commandFailed',
+            new apm.CommandFailedEvent(this, command, err, operation.started)
+          );
+        } else {
+          if (reply && reply.result && (reply.result.ok === 0 || reply.result.$err)) {
+            self.emit(
+              'commandFailed',
+              new apm.CommandFailedEvent(this, command, reply.result, operation.started)
+            );
+          } else {
+            self.emit(
+              'commandSucceeded',
+              new apm.CommandSucceededEvent(this, command, reply, operation.started)
+            );
+          }
+        }
+
+        if (typeof cb === 'function') cb(err, reply);
+      };
+    }
+
+    // Prepare the operation buffer
+    serializeCommand(self, command, (err, serializedBuffers) => {
+      if (err) throw err;
+
+      // Set the operation's buffer to the serialization of the commands
+      operation.buffer = serializedBuffers;
+
+      // If we have a monitoring operation schedule as the very first operation
+      // Otherwise add to back of queue
+      if (options.monitoring) {
+        self.queue.unshift(operation);
+      } else {
+        self.queue.push(operation);
+      }
+
+      // Attempt to execute the operation
+      if (!self.executing) {
+        process.nextTick(function() {
+          _execute(self)();
+        });
+      }
+    });
+  };
 
 }
 //
@@ -993,443 +1416,40 @@ export class Pool extends EventEmitter {
 //
 // inherits(Pool, EventEmitter);
 
-// Object.defineProperty(Pool.prototype, 'size', {
-//   enumerable: true,
-//   get: function() {
-//     return this.options.size;
-//   }
-// });
-//
-// Object.defineProperty(Pool.prototype, 'minSize', {
-//   enumerable: true,
-//   get: function() {
-//     return this.options.minSize;
-//   }
-// });
-//
-// Object.defineProperty(Pool.prototype, 'connectionTimeout', {
-//   enumerable: true,
-//   get: function() {
-//     return this.options.connectionTimeout;
-//   }
-// });
-//
-// Object.defineProperty(Pool.prototype, 'socketTimeout', {
-//   enumerable: true,
-//   get: function() {
-//     return this.options.socketTimeout;
-//   }
-// });
-
-
-/**
- * Return the total socket count in the pool.
- * @method
- * @return {Number} The number of socket available.
- */
-Pool.prototype.socketCount = function() {
-  return this.availableConnections.length + this.inUseConnections.length;
-  // + this.connectingConnections.length;
-};
-
-/**
- * Return all pool connections
- * @method
- * @return {Connection[]} The pool connections
- */
-Pool.prototype.allConnections = function() {
-  return this.availableConnections.concat(this.inUseConnections);
-};
-
-/**
- * Get a pool connection (round-robin)
- * @method
- * @return {Connection}
- */
-Pool.prototype.get = function() {
-  return this.allConnections()[0];
-};
-
-/**
- * Is the pool connected
- * @method
- * @return {boolean}
- */
-Pool.prototype.isConnected = function() {
-  // We are in a destroyed state
-  if (this.state === DESTROYED || this.state === DESTROYING) {
-    return false;
+  /** Size of a pool. */
+Object.defineProperty(Pool.prototype, 'size', {
+  enumerable: true,
+  get(): number {
+    return this.options.size;
   }
+});
 
-  // Get connections
-  var connections = this.availableConnections.concat(this.inUseConnections);
-
-  // Check if we have any connected connections
-  for (var i = 0; i < connections.length; i++) {
-    if (connections[i].isConnected()) return true;
+  /** Min size of a pool. */
+Object.defineProperty(Pool.prototype, 'minSize', {
+  enumerable: true,
+  get(): number {
+    return this.options.minSize;
   }
+});
 
-  // Not connected
-  return false;
-};
-
-/**
- * Was the pool destroyed
- * @method
- * @return {boolean}
- */
-Pool.prototype.isDestroyed = function() {
-  return this.state === DESTROYED || this.state === DESTROYING;
-};
-
-/**
- * Is the pool in a disconnected state
- * @method
- * @return {boolean}
- */
-Pool.prototype.isDisconnected = function() {
-  return this.state === DISCONNECTED;
-};
-
-/**
- * Connect pool
- */
-Pool.prototype.connect = function() {
-  if (this.state !== DISCONNECTED) {
-    throw new MongoError('connection in unlawful state ' + this.state);
+  /** Connection timeout setting of a pool. */
+Object.defineProperty(Pool.prototype, 'connectionTimeout', {
+  enumerable: true,
+  get(): number {
+    return this.options.connectionTimeout;
   }
+});
 
-  const self = this;
-  stateTransition(this, CONNECTING);
-
-  self.connectingConnections++;
-  connect(self.options, (err, connection) => {
-    self.connectingConnections--;
-
-    if (err) {
-      if (self.logger.isDebug()) {
-        self.logger.debug(`connection attempt failed with error [${JSON.stringify(err)}]`);
-      }
-
-      if (self.state === CONNECTING) {
-        self.emit('error', err);
-      }
-
-      return;
-    }
-
-    if (self.state === DESTROYED || self.state === DESTROYING) {
-      connection.destroy();
-      return self.destroy();
-    }
-
-    // attach event handlers
-    connection.on('error', self._connectionErrorHandler);
-    connection.on('close', self._connectionCloseHandler);
-    connection.on('timeout', self._connectionTimeoutHandler);
-    connection.on('parseError', self._connectionParseErrorHandler);
-    connection.on('message', self._messageHandler);
-
-    // If we are in a topology, delegate the auth to it
-    // This is to avoid issues where we would auth against an
-    // arbiter
-    if (self.options.inTopology) {
-      stateTransition(self, CONNECTED);
-      self.availableConnections.push(connection);
-      return self.emit('connect', self, connection);
-    }
-
-    if (self.state === DESTROYED || self.state === DESTROYING) {
-      return self.destroy();
-    }
-
-    if (err) {
-      self.destroy();
-      return self.emit('error', err);
-    }
-
-    stateTransition(self, CONNECTED);
-    self.availableConnections.push(connection);
-
-    if (self.minSize) {
-      for (let i = 0; i < self.minSize; i++) {
-        _createConnection(self);
-      }
-    }
-
-    self.emit('connect', self, connection);
-  });
-};
-
-/**
- * Authenticate using a specified mechanism
- * @param {authResultCallback} callback A callback function
- */
-Pool.prototype.auth = function(credentials, callback) {
-  if (typeof callback === 'function') callback(null, null);
-};
-
-/**
- * Logout all users against a database
- * @param {authResultCallback} callback A callback function
- */
-Pool.prototype.logout = function(dbName, callback) {
-  if (typeof callback === 'function') callback(null, null);
-};
-
-/**
- * Unref the pool
- * @method
- */
-Pool.prototype.unref = function() {
-  // Get all the known connections
-  var connections = this.availableConnections.concat(this.inUseConnections);
-
-  connections.forEach(function(c) {
-    c.unref();
-  });
-};
-
-
-
-/**
- * Destroy pool
- * @method
- */
-Pool.prototype.destroy = function(force, callback) {
-  var self = this;
-  // Do not try again if the pool is already dead
-  if (this.state === DESTROYED || self.state === DESTROYING) {
-    if (typeof callback === 'function') callback(null, null);
-    return;
+  /** Socket timeout setting of a pool. */
+Object.defineProperty(Pool.prototype, 'socketTimeout', {
+  enumerable: true,
+  get(): number {
+    return this.options.socketTimeout;
   }
-
-  // Set state to destroyed
-  stateTransition(this, DESTROYING);
-
-  // Are we force closing
-  if (force) {
-    // Get all the known connections
-    var connections = self.availableConnections.concat(self.inUseConnections);
-
-    // Flush any remaining work items with
-    // an error
-    while (self.queue.length > 0) {
-      var workItem = self.queue.shift();
-      if (typeof workItem.cb === 'function') {
-        workItem.cb(new MongoError('Pool was force destroyed'));
-      }
-    }
-
-    // Destroy the topology
-    return destroy(self, connections, { force: true }, callback);
-  }
-
-  // Clear out the reconnect if set
-  if (this.reconnectId) {
-    clearTimeout(this.reconnectId);
-  }
-
-  // If we have a reconnect connection running, close
-  // immediately
-  if (this.reconnectConnection) {
-    this.reconnectConnection.destroy();
-  }
-
-  // Wait for the operations to drain before we close the pool
-  function checkStatus() {
-    flushMonitoringOperations(self.queue);
-
-    if (self.queue.length === 0) {
-      // Get all the known connections
-      var connections = self.availableConnections.concat(self.inUseConnections);
-
-      // Check if we have any in flight operations
-      for (var i = 0; i < connections.length; i++) {
-        // There is an operation still in flight, reschedule a
-        // check waiting for it to drain
-        if (connections[i].workItems.length > 0) {
-          return setTimeout(checkStatus, 1);
-        }
-      }
-
-      destroy(self, connections, { force: false }, callback);
-      // } else if (self.queue.length > 0 && !this.reconnectId) {
-    } else {
-      // Ensure we empty the queue
-      _execute(self)();
-      // Set timeout
-      setTimeout(checkStatus, 1);
-    }
-  }
-
-  // Initiate drain of operations
-  checkStatus();
-};
-
-/**
- * Reset all connections of this pool
- *
- * @param {function} [callback]
- */
-Pool.prototype.reset = function(callback) {
-  // this.destroy(true, err => {
-  //   if (err && typeof callback === 'function') {
-  //     callback(err, null);
-  //     return;
-  //   }
-
-  //   stateTransition(this, DISCONNECTED);
-  //   this.connect();
-
-  //   if (typeof callback === 'function') callback(null, null);
-  // });
-
-  if (typeof callback === 'function') callback();
-};
+});
 
 
 
-/**
- * Write a message to MongoDB
- * @method
- * @return {Connection}
- */
-Pool.prototype.write = function(command, options, cb) {
-  var self = this;
-  // Ensure we have a callback
-  if (typeof options === 'function') {
-    cb = options;
-  }
-
-  // Always have options
-  options = options || {};
-
-  // We need to have a callback function unless the message returns no response
-  if (!(typeof cb === 'function') && !options.noResponse) {
-    throw new MongoError('write method must provide a callback');
-  }
-
-  // Pool was destroyed error out
-  if (this.state === DESTROYED || this.state === DESTROYING) {
-    // Callback with an error
-    if (cb) {
-      try {
-        cb(new MongoError('pool destroyed'));
-      } catch (err) {
-        process.nextTick(function() {
-          throw err;
-        });
-      }
-    }
-
-    return;
-  }
-
-  if (this.options.domainsEnabled && process.domain && typeof cb === 'function') {
-    // if we have a domain bind to it
-    var oldCb = cb;
-    cb = process.domain.bind(function() {
-      // v8 - argumentsToArray one-liner
-      var args = new Array(arguments.length);
-      for (var i = 0; i < arguments.length; i++) {
-        args[i] = arguments[i];
-      }
-      // bounce off event loop so domain switch takes place
-      process.nextTick(function() {
-        oldCb.apply(null, args);
-      });
-    });
-  }
-
-  // Do we have an operation
-  var operation = {
-    cb: cb,
-    raw: false,
-    promoteLongs: true,
-    promoteValues: true,
-    promoteBuffers: false,
-    fullResult: false
-  };
-
-  // Set the options for the parsing
-  operation.promoteLongs = typeof options.promoteLongs === 'boolean' ? options.promoteLongs : true;
-  operation.promoteValues =
-    typeof options.promoteValues === 'boolean' ? options.promoteValues : true;
-  operation.promoteBuffers =
-    typeof options.promoteBuffers === 'boolean' ? options.promoteBuffers : false;
-  operation.raw = typeof options.raw === 'boolean' ? options.raw : false;
-  operation.immediateRelease =
-    typeof options.immediateRelease === 'boolean' ? options.immediateRelease : false;
-  operation.documentsReturnedIn = options.documentsReturnedIn;
-  operation.command = typeof options.command === 'boolean' ? options.command : false;
-  operation.fullResult = typeof options.fullResult === 'boolean' ? options.fullResult : false;
-  operation.noResponse = typeof options.noResponse === 'boolean' ? options.noResponse : false;
-  operation.session = options.session || null;
-
-  // Optional per operation socketTimeout
-  operation.socketTimeout = options.socketTimeout;
-  operation.monitoring = options.monitoring;
-  // Custom socket Timeout
-  if (options.socketTimeout) {
-    operation.socketTimeout = options.socketTimeout;
-  }
-
-  // Get the requestId
-  operation.requestId = command.requestId;
-
-  // If command monitoring is enabled we need to modify the callback here
-  if (self.options.monitorCommands) {
-    this.emit('commandStarted', new apm.CommandStartedEvent(this, command));
-
-    operation.started = process.hrtime();
-    operation.cb = (err, reply) => {
-      if (err) {
-        self.emit(
-          'commandFailed',
-          new apm.CommandFailedEvent(this, command, err, operation.started)
-        );
-      } else {
-        if (reply && reply.result && (reply.result.ok === 0 || reply.result.$err)) {
-          self.emit(
-            'commandFailed',
-            new apm.CommandFailedEvent(this, command, reply.result, operation.started)
-          );
-        } else {
-          self.emit(
-            'commandSucceeded',
-            new apm.CommandSucceededEvent(this, command, reply, operation.started)
-          );
-        }
-      }
-
-      if (typeof cb === 'function') cb(err, reply);
-    };
-  }
-
-  // Prepare the operation buffer
-  serializeCommand(self, command, (err, serializedBuffers) => {
-    if (err) throw err;
-
-    // Set the operation's buffer to the serialization of the commands
-    operation.buffer = serializedBuffers;
-
-    // If we have a monitoring operation schedule as the very first operation
-    // Otherwise add to back of queue
-    if (options.monitoring) {
-      self.queue.unshift(operation);
-    } else {
-      self.queue.push(operation);
-    }
-
-    // Attempt to execute the operation
-    if (!self.executing) {
-      process.nextTick(function() {
-        _execute(self)();
-      });
-    }
-  });
-};
 
 
 
