@@ -1,5 +1,5 @@
 // 'use strict';
-// 
+//
 // const crypto = require('crypto');
 // const requireOptional = require('require_optional');
 
@@ -24,6 +24,12 @@ export function readUint32LE(buf: Uint8Array, offset: number = 0): number {
   return buf[offset] & 0xff | (buf[offset + 1] << 8) & 0xff | (buf[offset + 2] << 16) & 0xff | (buf[offset + 3] << 24)  & 0xff
 }
 
+/** Writes an unsigned integer to tha buffer at specified offset. */
+export function writeUint8(buf: Uint8Array, int: number, offset: number = 0): number {
+  buf[offset] = int & 0xff;
+  return 1;
+}
+
 /** Writes an unsigned int to four little endian bytes starting at offset. */
 export function writeUint32LE(buf: Uint8Array,int: number, offset: number = 0): number {
   // return buf[offset] | buf[offset + 1] << 8 | buf[offset + 2] << 16 | buf[offset + 3] << 24
@@ -31,7 +37,7 @@ export function writeUint32LE(buf: Uint8Array,int: number, offset: number = 0): 
   buf[offset + 1] = int >> 8 & 0xff;
   buf[offset + 2] = int >> 16 & 0xff
   buf[offset + 3] = int >> 24 & 0xff
-  
+
   return buf.byteLength - offset;
 }
 
@@ -40,19 +46,37 @@ export function writeInt32LE(buf: Uint8Array,int: number, offset: number = 0): n
   // return buf[offset] | buf[offset + 1] << 8 | buf[offset + 2] << 16 | buf[offset + 3] << 24
   buf[offset] = int
   buf[offset + 1] = int >> 8
-  buf[offset + 2] = int >> 16 
-  buf[offset + 3] = int >> 24 
-  
+  buf[offset + 2] = int >> 16
+  buf[offset + 3] = int >> 24
+
   return buf.byteLength - offset;
+}
+
+/** Concatenates given buffers. */
+export function concat(bufs: Uint8Array[]): Uint8Array {
+  const total: number = bufs.reduce(
+    (acc, cur): number => acc + cur.byteLength,
+    0
+  );
+
+  const buf: Uint8Array = new Uint8Array(total);
+  let offset: number = 0;
+
+  for (const b of bufs) {
+    buf.set(b, offset);
+    offset += b.byteLength;
+  }
+
+  return buf;
 }
 
 /** Gernerates a UUID v4. */
 export function uuidv4(): Uint8Array {
   const r: Uint8Array = crypto.getRandomValues(new Uint8Array(16));
-  
+
   r[6] = (r[6] & 0x0f) | 0x40;
   r[8] = (r[8] & 0x3f) | 0x80;
-  
+
   return r;
 }
 
@@ -99,17 +123,17 @@ export function relayEvents(source: EventEmitter, target: EventEmitter, events: 
 
 // function retrieveKerberos() {
 //   let kerberos;
-// 
+//
 //   try {
 //     kerberos = requireOptional('kerberos');
 //   } catch (err) {
 //     if (err.code === 'MODULE_NOT_FOUND') {
 //       throw new Error('The `kerberos` module was not found. Please install it and try again.');
 //     }
-// 
+//
 //     throw err;
 //   }
-// 
+//
 //   return kerberos;
 // }
 
@@ -134,7 +158,7 @@ export function relayEvents(source: EventEmitter, target: EventEmitter, events: 
 //       BSON: noEJSONError
 //     };
 //   }
-// 
+//
 //   return EJSON;
 // }
 

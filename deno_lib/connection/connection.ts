@@ -23,25 +23,10 @@ import { OP_CODES, MESSAGE_HEADER_SIZE } from "./../wireprotocol/shared.ts"
 
 import { drain } from "https://denopkg.com/chiefbiiko/drain/mod.ts";
 
-function noop(): void {}
+// function noop(): void {}
 
-/** Concatenates given buffers. */
-function concat(bufs: Uint8Array[]): Uint8Array {
-  const total: number = bufs.reduce(
-    (acc, cur): number => acc + cur.byteLength,
-    0
-  );
+import { concat} from "./../utils.ts"
 
-  const buf: Uint8Array = new Uint8Array(total);
-  let offset: number = 0;
-
-  for (const b of bufs) {
-    buf.set(b, offset);
-    offset += b.byteLength;
-  }
-
-  return buf;
-}
 
 const OP_COMPRESSED: number = OP_CODES.OP_COMPRESSED;
 
@@ -75,6 +60,9 @@ const DEBUG_FIELDS: string[] = [
 let connectionAccountingSpy: any = undefined;
 let connectionAccounting: boolean = false;
 let connections: { [key:number]: Connection} = {};
+
+// Events
+export const CONNECTION_EVENT_NAMES: string[] = ['error', 'close', 'timeout', 'parseError', 'connect', 'message'];
 
 export interface ConnectionOptions {
   maxBSONMessageSize?: number;
@@ -119,6 +107,7 @@ export class Connection extends EventEmitter {
   sizeOfMessage: number
   buffer: Uint8Array
   stubBuffer: Uint8Array
+  _connectionFailHandled: boolean
 
 
 
@@ -662,40 +651,40 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
 //  * @event Connection#connect
 //  * @type {Connection}
 //  */
-// 
+//
 // /**
 //  * The server connection closed, all pool connections closed
 //  *
 //  * @event Connection#close
 //  * @type {Connection}
 //  */
-// 
+//
 // /**
 //  * The server connection caused an error, all pool connections closed
 //  *
 //  * @event Connection#error
 //  * @type {Connection}
 //  */
-// 
+//
 // /**
 //  * The server connection timed out, all pool connections closed
 //  *
 //  * @event Connection#timeout
 //  * @type {Connection}
 //  */
-// 
+//
 // /**
 //  * The driver experienced an invalid message, all pool connections closed
 //  *
 //  * @event Connection#parseError
 //  * @type {Connection}
 //  */
-// 
+//
 // /**
 //  * An event emitted each time the connection receives a parsed message from the wire
 //  *
 //  * @event Connection#message
 //  * @type {Connection}
 //  */
-// 
+//
 // module.exports = Connection;
