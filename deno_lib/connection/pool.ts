@@ -746,6 +746,7 @@ export interface PoolOptions {
   promoteValues?: boolean
   domainsEnabled?: boolean,
   agreedCompressor?: unknown
+  inTopology?: boolean
 }
 
 /** A class representation of a connection pool. */
@@ -878,108 +879,85 @@ export class Pool extends EventEmitter {
     };
   }
 
-  // /** Gets the size of apool. */
-  // get size(): number {
-  //   return this.options.size;
-  // }
-  // 
-  // /** Gets the min size of a pool. */
-  // get minSize(): number {
-  //   return this.options.minSize;
-  // }
-  // 
-  // /** Gets the min size of a pool. */
-  // get connectionTimeout(): number {
-  //   return this.options.connectionTimeout;
-  // }
-  // 
-  // /** Gets the min size of a pool. */
-  // get socketTimeout(): number {
-  //   return this.options.socketTimeout;
-  // }
+  /** Gets the size of apool. */
+  get size(): number {
+    return this.options.size;
+  }
+  
+  /** Gets the min size of a pool. */
+  get minSize(): number {
+    return this.options.minSize;
+  }
+  
+  /** Gets the min size of a pool. */
+  get connectionTimeout(): number {
+    return this.options.connectionTimeout;
+  }
+  
+  /** Gets the min size of a pool. */
+  get socketTimeout(): number {
+    return this.options.socketTimeout;
+  }
 
-  /**
-   * Return the total socket count in the pool.
-   * @method
-   * @return {Number} The number of socket available.
-   */
-  Pool.prototype.socketCount = function() {
+  /**  Returns the total socket count in the pool. */
+  socketCount(): number {
     return this.availableConnections.length + this.inUseConnections.length;
     // + this.connectingConnections.length;
-  };
+  }
 
-  /**
-   * Return all pool connections
-   * @method
-   * @return {Connection[]} The pool connections
-   */
-  Pool.prototype.allConnections = function() {
+  /** Returns all pool connections. */
+  allConnections(): Connection[] {
     return this.availableConnections.concat(this.inUseConnections);
-  };
+  }
 
-  /**
-   * Get a pool connection (round-robin)
-   * @method
-   * @return {Connection}
-   */
-  Pool.prototype.get = function() {
+  /** Gets a pool connection (round-robin). */
+  get(): Connection {
     return this.allConnections()[0];
-  };
+  }
 
-  /**
-   * Is the pool connected
-   * @method
-   * @return {boolean}
-   */
-  Pool.prototype.isConnected = function() {
+  /** Is the pool connected. */
+  isConnected(): boolean {
     // We are in a destroyed state
     if (this.state === DESTROYED || this.state === DESTROYING) {
       return false;
     }
 
     // Get connections
-    var connections = this.availableConnections.concat(this.inUseConnections);
+    const connections: Connection[] = this.availableConnections.concat(this.inUseConnections);
 
     // Check if we have any connected connections
-    for (var i = 0; i < connections.length; i++) {
+    for (let i: number = 0; i < connections.length; i++) {
       if (connections[i].isConnected()) return true;
     }
 
     // Not connected
     return false;
-  };
+  }
 
-  /**
-   * Was the pool destroyed
-   * @method
-   * @return {boolean}
-   */
-  Pool.prototype.isDestroyed = function() {
+  /** Was the pool destroyed? */
+  isDestroyed(): boolean {
     return this.state === DESTROYED || this.state === DESTROYING;
-  };
+  }
 
-  /**
-   * Is the pool in a disconnected state
-   * @method
-   * @return {boolean}
-   */
-  Pool.prototype.isDisconnected = function() {
+  /** Is the pool in a disconnected state? */
+  isDisconnected(): boolean {
     return this.state === DISCONNECTED;
-  };
+  }
 
-  /**
-   * Connect pool
-   */
-  Pool.prototype.connect = function() {
+  /** Connects a pool. */
+  connect(): void {
     if (this.state !== DISCONNECTED) {
-      throw new MongoError('connection in unlawful state ' + this.state);
+      // throw new MongoError('connection in unlawful state ' + this.state);
+      throw new MongoError(`connection is in invalid state ${this.state}`);
     }
 
-    const self = this;
+    const self: Pool = this;
+    
     stateTransition(this, CONNECTING);
 
     self.connectingConnections++;
-    connect(self.options, (err, connection) => {
+    
+    connect(self.options, (err?:Error, connection?: Connection): void => {
       self.connectingConnections--;
 
       if (err) {
@@ -1025,17 +1003,18 @@ export class Pool extends EventEmitter {
       }
 
       stateTransition(self, CONNECTED);
+      
       self.availableConnections.push(connection);
 
       if (self.minSize) {
-        for (let i = 0; i < self.minSize; i++) {
+        for (let i: number = 0; i < self.minSize; i++) {
           _createConnection(self);
         }
       }
 
       self.emit('connect', self, connection);
     });
-  };
+  }
 
   /**
    * Authenticate using a specified mechanism
@@ -1416,37 +1395,37 @@ export class Pool extends EventEmitter {
 //
 // inherits(Pool, EventEmitter);
 
-  /** Size of a pool. */
-Object.defineProperty(Pool.prototype, 'size', {
-  enumerable: true,
-  get(): number {
-    return this.options.size;
-  }
-});
-
-  /** Min size of a pool. */
-Object.defineProperty(Pool.prototype, 'minSize', {
-  enumerable: true,
-  get(): number {
-    return this.options.minSize;
-  }
-});
-
-  /** Connection timeout setting of a pool. */
-Object.defineProperty(Pool.prototype, 'connectionTimeout', {
-  enumerable: true,
-  get(): number {
-    return this.options.connectionTimeout;
-  }
-});
-
-  /** Socket timeout setting of a pool. */
-Object.defineProperty(Pool.prototype, 'socketTimeout', {
-  enumerable: true,
-  get(): number {
-    return this.options.socketTimeout;
-  }
-});
+//   /** Size of a pool. */
+// Object.defineProperty(Pool.prototype, 'size', {
+//   enumerable: true,
+//   get(): number {
+//     return this.options.size;
+//   }
+// });
+// 
+//   /** Min size of a pool. */
+// Object.defineProperty(Pool.prototype, 'minSize', {
+//   enumerable: true,
+//   get(): number {
+//     return this.options.minSize;
+//   }
+// });
+// 
+//   /** Connection timeout setting of a pool. */
+// Object.defineProperty(Pool.prototype, 'connectionTimeout', {
+//   enumerable: true,
+//   get(): number {
+//     return this.options.connectionTimeout;
+//   }
+// });
+// 
+//   /** Socket timeout setting of a pool. */
+// Object.defineProperty(Pool.prototype, 'socketTimeout', {
+//   enumerable: true,
+//   get(): number {
+//     return this.options.socketTimeout;
+//   }
+// });
 
 
 
