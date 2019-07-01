@@ -365,8 +365,8 @@ function destroy(self: Pool, connections: Connection[], options: {[key:string]:a
 
   // Destroy all connections
   connections.forEach((connection: Connection): void => {
-    for (const eventName of CONNECTION_EVENT_NAMES) {
-      connection.removeAllListeners(eventName);
+    for (let i: number = 0; i < CONNECTION_EVENT_NAMES.length; ++i ) {
+      connection.removeAllListeners(CONNECTION_EVENT_NAMES[i]);
     }
 
     connection.destroy(options, connectionDestroyed);
@@ -1016,46 +1016,37 @@ export class Pool extends EventEmitter {
     });
   }
 
-  /**
-   * Authenticate using a specified mechanism
-   * @param {authResultCallback} callback A callback function
-   */
-  Pool.prototype.auth = function(credentials, callback) {
-    if (typeof callback === 'function') callback(null, null);
+  /** Authenticate using a specified mechanism. */
+  auth(credentials?: never, callback?: Callback): void {
+    this.logger.warn("Pool.prototype.auth is a noop method")
+    
+    if (typeof callback === 'function') {callback(null, null);}
+  }
+
+  /** Logout. */
+  logout(dbName?: never, callback?: Callback): void {
+        this.logger.warn("Pool.prototype.logout is a noop method")
+        
+    if (typeof callback === 'function') {callback(null, null);}
   };
 
-  /**
-   * Logout all users against a database
-   * @param {authResultCallback} callback A callback function
-   */
-  Pool.prototype.logout = function(dbName, callback) {
-    if (typeof callback === 'function') callback(null, null);
-  };
-
-  /**
-   * Unref the pool
-   * @method
-   */
-  Pool.prototype.unref = function() {
+  /** Unrefs the pool. */
+  unref(): void {
     // Get all the known connections
-    var connections = this.availableConnections.concat(this.inUseConnections);
-
-    connections.forEach(function(c) {
-      c.unref();
-    });
+    const connections: Connection[] = this.availableConnections.concat(this.inUseConnections);
+    
+    connections.forEach((connection: Connection): void => connection.unref());
   };
 
 
 
-  /**
-   * Destroy pool
-   * @method
-   */
-  Pool.prototype.destroy = function(force, callback) {
-    var self = this;
+  /** Destroys a pool. */
+  destroy(force? :boolean, callback?: Callback): void {
+    const self: Pool = this;
+    
     // Do not try again if the pool is already dead
     if (this.state === DESTROYED || self.state === DESTROYING) {
-      if (typeof callback === 'function') callback(null, null);
+      if (typeof callback === 'function') {callback(null, null);}
       return;
     }
 
@@ -1065,12 +1056,12 @@ export class Pool extends EventEmitter {
     // Are we force closing
     if (force) {
       // Get all the known connections
-      var connections = self.availableConnections.concat(self.inUseConnections);
+      const connections: Connection[] = self.availableConnections.concat(self.inUseConnections);
 
       // Flush any remaining work items with
       // an error
       while (self.queue.length > 0) {
-        var workItem = self.queue.shift();
+        const workItem: unknown = self.queue.shift();
         if (typeof workItem.cb === 'function') {
           workItem.cb(new MongoError('Pool was force destroyed'));
         }
@@ -1097,10 +1088,10 @@ export class Pool extends EventEmitter {
 
       if (self.queue.length === 0) {
         // Get all the known connections
-        var connections = self.availableConnections.concat(self.inUseConnections);
+        const connections: Connection[] = self.availableConnections.concat(self.inUseConnections);
 
         // Check if we have any in flight operations
-        for (var i = 0; i < connections.length; i++) {
+        for (let i: number = 0; i < connections.length; i++) {
           // There is an operation still in flight, reschedule a
           // check waiting for it to drain
           if (connections[i].workItems.length > 0) {
@@ -1122,12 +1113,8 @@ export class Pool extends EventEmitter {
     checkStatus();
   };
 
-  /**
-   * Reset all connections of this pool
-   *
-   * @param {function} [callback]
-   */
-  Pool.prototype.reset = function(callback) {
+  /** Resets all connections of this pool.  */
+  reset(callback: Callback): void {
     // this.destroy(true, err => {
     //   if (err && typeof callback === 'function') {
     //     callback(err, null);
@@ -1139,8 +1126,9 @@ export class Pool extends EventEmitter {
 
     //   if (typeof callback === 'function') callback(null, null);
     // });
+      this.logger.warn("Pool.prototype.reset is a noop method")
 
-    if (typeof callback === 'function') callback();
+    if (typeof callback === 'function') {callback(null, null);}
   };
 
 
