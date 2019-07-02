@@ -39,7 +39,7 @@ export function command(server: unknown, ns: string, cmd: {[key:string]: any}, o
 
     let clusterTime: BSON.LONG = server.clusterTime;
     let finalCmd: {[key:string]: any} = { ...cmd }
-    
+
     if (hasSessionSupport(server) && session) {
       if (
         session.clusterTime &&
@@ -49,7 +49,7 @@ export function command(server: unknown, ns: string, cmd: {[key:string]: any}, o
       }
 
       const err: Error = applySession(session, finalCmd, options);
-      
+
       if (err) {
         return callback(err);
       }
@@ -72,7 +72,7 @@ export function command(server: unknown, ns: string, cmd: {[key:string]: any}, o
       };
     }
 
-    const commandOptions: {[key:string]: any} = 
+    const commandOptions: {[key:string]: any} =
       {
         command: true,
         numberToSkip: 0,
@@ -87,13 +87,13 @@ export function command(server: unknown, ns: string, cmd: {[key:string]: any}, o
     // commandOptions.slaveOk = readPreference.slaveOk();
 
     const cmdNs: string = `${databaseNamespace(ns)}.$cmd`;
-    
+
     const message: Msg | BinMsg = shouldUseOpMsg
       ? new Msg(cmdNs, finalCmd, commandOptions)
       : new Query(cmdNs, finalCmd, commandOptions);
 
     const inTransaction: boolean  = session && (session.inTransaction() || isTransactionCommand(finalCmd));
-    
+
     const commandResponseHandler: Callback = inTransaction
       ? (err?: Error | MongoError, ...rest: any[]): any => {
           if (
@@ -119,7 +119,7 @@ export function command(server: unknown, ns: string, cmd: {[key:string]: any}, o
 /** Does a topology have session support? */
 function hasSessionSupport(topology: unknown): boolean {
   if (!topology) {return false;}
-  
+
   if (topology.description) {
     return topology.description.maxWireVersion >= 6;
   }

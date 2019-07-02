@@ -144,7 +144,8 @@ async function performInitialHandshake(connection: Connection, options: {[key:st
     getSaslSupportedMechs(options)
   );
 
-  const start: number = Date.now()
+  const started: number = performance.now()
+
   let  ismaster: {[key:string]:any}
 
   try {
@@ -189,7 +190,7 @@ async function performInitialHandshake(connection: Connection, options: {[key:st
       //       handshake being done in the `Server` class. Likely, it should be
       //       relocated, or at very least restructured.
       connection.ismaster = ismaster;
-      connection.lastIsMasterMS =  Date.now() - start;
+      connection.lastIsMasterMs =  performance.now() - started;
 
       const credentials: MongoCredentials = options.credentials;
 

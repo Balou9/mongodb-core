@@ -90,9 +90,9 @@ export function uuidv4(): Uint8Array {
 //   return result;
 // };
 
-/** Calculates a ms duration from a simple timestamp (Date.now). */
+/** Calculates a ms duration from a simple timestamp (performance.now). */
 export function calculateDurationInMs(started: number): number {
-  return Date.now() - started;
+  return performance.now() - started;
 }
 
 // /**

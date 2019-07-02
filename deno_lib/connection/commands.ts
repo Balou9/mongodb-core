@@ -47,7 +47,7 @@ export interface QueryOptions {
   serializeFunctions?: boolean;
   checkKeys?: boolean;
   slaveOk?: boolean
-  maxBSONSize?: number;
+  maxBsonSize?: number;
   returnFieldSelector?:  {[key:string]:any};
   // pre32Limit?: unknown;
 }
@@ -64,7 +64,7 @@ export class Query {
   returnFieldSelector: {[key:string]:any};
   // pre32Limit: unknown;
   serializeFunctions: boolean;
-  maxBSONSize: number;
+  maxBsonSize: number;
   checkKeys: boolean;
   batchSize: number;
 
@@ -107,7 +107,7 @@ export class Query {
       typeof options.serializeFunctions === 'boolean' ? options.serializeFunctions : false;
     // this.ignoreUndefined =
     //   typeof options.ignoreUndefined === 'boolean' ? options.ignoreUndefined : false;
-    this.maxBSONSize = options.maxBSONSize || 1024 * 1024 * 16;
+    this.maxBsonSize = options.maxBsonSize || 1024 * 1024 * 16;
     this.checkKeys = typeof options.checkKeys === 'boolean' ? options.checkKeys : true;
     this.batchSize = this.numberToReturn;
 
@@ -310,7 +310,7 @@ export class Query {
 //     typeof options.serializeFunctions === 'boolean' ? options.serializeFunctions : false;
 //   this.ignoreUndefined =
 //     typeof options.ignoreUndefined === 'boolean' ? options.ignoreUndefined : false;
-//   this.maxBSONSize = options.maxBSONSize || 1024 * 1024 * 16;
+//   this.maxBsonSize = options.maxBsonSize || 1024 * 1024 * 16;
 //   this.checkKeys = typeof options.checkKeys === 'boolean' ? options.checkKeys : true;
 //   this.batchSize = self.numberToReturn;
 //

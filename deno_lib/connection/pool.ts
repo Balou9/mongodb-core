@@ -1,6 +1,6 @@
 // 'use strict';
 
-import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
+// import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
 // const inherits = require('util').inherits;
 // const EventEmitter = require('events').EventEmitter;
 import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
@@ -31,7 +31,7 @@ import { apm } from "./apm.ts"
 import { connect} from "./connect.ts"
 // const updateSessionFromResponse = require('../sessions').updateSessionFromResponse;
 import { updateSessionFromResponse} from "./../sessions.ts"
-import { Callback,concat, readInt32LE, noop, writeUint8, writeInt32LE} from "./../utils.ts"
+import { Callback,concat, noop, readInt32LE, writeUint8, writeInt32LE} from "./../utils.ts"
 
 const DISCONNECTED: string = 'disconnected';
 const CONNECTING: string = 'connecting';
@@ -90,7 +90,8 @@ function connectionFailureHandler(pool: Pool, event: string, err: Error, connect
 
     // Flush all work Items on this connection
     while (connection.workItems.length > 0) {
-      const workItem: unknown = connection.workItems.shift();
+      const workItem:  {[key:string]: any} = connection.workItems.shift();
+
       if (workItem.cb) {workItem.cb(err);}
     }
   }
@@ -217,7 +218,7 @@ function moveConnectionBetween(connection: Connection, from: Connection[], to: C
 function messageHandler(self: Pool): (message: BinMsg, connection: Connection) => void {
   return (message: BinMsg, connection: Connection): void => {
     // workItem to execute
-    var workItem = null;
+    let workItem = null;
 
     // Locate the workItem
     for (let i: number = 0; i < connection.workItems.length; i++) {
@@ -256,15 +257,15 @@ function messageHandler(self: Pool): (message: BinMsg, connection: Connection) =
     }
 
     function handleOperationCallback(self: Pool, cb: Callback, err?: Error, result?: CommandResult): void {
-      // No domain enabled
-      if (!self.options.domainsEnabled) {
-        // return process.nextTick(function() {
-        //   return cb(err, result);
-        // });
-        setTimeout((): void => cb(err, result), 0)
-        return
-        // return cb(err, result)
-      }
+      // // No domain enabled
+      // if (!self.options.domainsEnabled) {
+      //   // return process.nextTick(function() {
+      //   //   return cb(err, result);
+      //   // });
+      //   setTimeout((): void => cb(err, result), 0)
+      //   return
+      //   // return cb(err, result)
+      // }
 
       // Domain enabled just call the callback
       cb(err, result);
@@ -398,31 +399,31 @@ function serializeCommand(self: Pool, command: Msg, callback: Callback): void {
 
     // Create the msgHeader of OP_COMPRESSED
     const msgHeader: Uint8Array = new Uint8Array(MESSAGE_HEADER_SIZE);
-    
+
      // messageLength
     writeInt32LE(msgHeader,
       MESSAGE_HEADER_SIZE + COMPRESSION_DETAILS_SIZE + compressedMessage.length,
       0
     );
-    
+
     // requestID
-    writeInt32LE(msgHeader,command.requestId, 4); 
-    
+    writeInt32LE(msgHeader,command.requestId, 4);
+
      // responseTo (zero)
     writeInt32LE(msgHeader,0, 8);
-    
+
      // opCode
     writeInt32LE(msgHeader, OPCODES.OP_COMPRESSED, 12);
 
     // Create the compression details of OP_COMPRESSED
     const compressionDetails = new Uint8Array(COMPRESSION_DETAILS_SIZE);
-    
+
     // originalOpcode
-    writeInt32LE(compressionDetails, originalCommandOpCode, 0); 
-    
+    writeInt32LE(compressionDetails, originalCommandOpCode, 0);
+
      // Size of the uncompressed compressedMessage, excluding the MsgHeader
     writeInt32LE(compressionDetails, messageToBeCompressed.length, 4);
-    
+
      // compressorID
     writeUint8(compressionDetails, compressorIDs[self.options.agreedCompressor], 8);
 
@@ -507,10 +508,10 @@ function _createConnection(self: Pool): void {
   });
 }
 
-function flushMonitoringOperations(queue: unknown[]): void {
+function flushMonitoringOperations(queue:  {[key:string]: any}[]): void {
   for (let i: number = 0; i < queue.length; i++) {
     if (queue[i].monitoring) {
-      const workItem: unknown = queue[i];
+      const workItem:  {[key:string]: any} = queue[i];
       queue.splice(i, 1);
       workItem.cb(
         new MongoError({ message: 'no connection available for monitoring', driver: true })
@@ -522,10 +523,10 @@ function flushMonitoringOperations(queue: unknown[]): void {
 function _execute(self: Pool): () => void {
   return (): void => {
     if (self.state === DESTROYED) {return;}
-    
+
     // Already executing, skip
     if (self.executing) {return;}
-    
+
     // Set pool as executing
     self.executing = true;
 
@@ -576,7 +577,7 @@ function _execute(self: Pool): () => void {
       }
 
       // Get the next work item
-      const workItem: unknown = self.queue.shift();
+      const workItem:  {[key:string]: any} = self.queue.shift();
 
       // If we are monitoring we need to use a connection that is not
       // running another operation to avoid socket timeout changes
@@ -685,39 +686,15 @@ function _execute(self: Pool): () => void {
 }
 
 /**
- * Creates a new Pool instance
- * @class
- * @param {string} options.host The server host
- * @param {number} options.port The server port
- * @param {number} [options.size=5] Max server connection pool size
- * @param {number} [options.minSize=0] Minimum server connection pool size
- * @param {boolean} [options.reconnect=true] Server will attempt to reconnect on loss of connection
- * @param {number} [options.reconnectTries=30] Server attempt to reconnect #times
- * @param {number} [options.reconnectInterval=1000] Server will wait # milliseconds between retries
- * @param {boolean} [options.keepAlive=true] TCP Connection keep alive enabled
- * @param {number} [options.keepAliveInitialDelay=300000] Initial delay before TCP keep alive enabled
- * @param {boolean} [options.noDelay=true] TCP Connection no delay
- * @param {number} [options.connectionTimeout=30000] TCP Connection timeout setting
- * @param {number} [options.socketTimeout=360000] TCP Socket timeout setting
- * @param {number} [options.monitoringSocketTimeout=30000] TCP Socket timeout setting for replicaset monitoring socket
- * @param {boolean} [options.ssl=false] Use SSL for connection
- * @param {boolean|function} [options.checkServerIdentity=true] Ensure we check server identify during SSL, set to false to disable checking. Only works for Node 0.12.x or higher. You can pass in a boolean or your own checkServerIdentity override function.
- * @param {Buffer} [options.ca] SSL Certificate store binary buffer
- * @param {Buffer} [options.crl] SSL Certificate revocation store binary buffer
- * @param {Buffer} [options.cert] SSL Certificate binary buffer
- * @param {Buffer} [options.key] SSL Key file binary buffer
- * @param {string} [options.passPhrase] SSL Certificate pass phrase
- * @param {boolean} [options.rejectUnauthorized=false] Reject unauthorized server certificates
- * @param {boolean} [options.promoteLongs=true] Convert Long values from the db into Numbers if they fit into 53 bits
- * @param {boolean} [options.promoteValues=true] Promotes BSON values to native types where possible, set to false to only receive wrapper types.
- * @param {boolean} [options.promoteBuffers=false] Promotes Binary BSON values to native Node Buffers.
- * @param {boolean} [options.domainsEnabled=false] Enable the wrapping of the callback in the current domain, disabled by default to avoid perf hit.
- * @fires Pool#connect
- * @fires Pool#close
- * @fires Pool#error
- * @fires Pool#timeout
- * @fires Pool#parseError
- * @return {Pool} A cursor instance
+ * Pool events:
+ *  + connect: server connected, verifies the connection is up and running
+ *  + reconnect: server reconnected, verifies that the pool reconnected
+ *  + close: server connection closed, all pool connections closed
+ *  + error: server connection caused an error, all pool connections closed
+ *  + timeout: server connection timed out, all pool connections closed
+ *  + parseError: driver got an invalid msg, all pool connections closed
+ *  + attemptReconnect: driver attempted to reconnect
+ *  + reconnectFailed: driver exhausted all reconnect attempts
  */
 
 /** Options for creating a new connection pool. */
@@ -744,9 +721,10 @@ export interface PoolOptions {
   passPhrase?: string
   rejectUnauthorized?: boolean
   promoteValues?: boolean
-  domainsEnabled?: boolean,
+  // domainsEnabled?: boolean,
   agreedCompressor?: unknown
-  inTopology?: boolean
+  inTopology?: boolean,
+  monitorCommands?: boolean
 }
 
 /** A class representation of a connection pool. */
@@ -763,7 +741,7 @@ export class Pool extends EventEmitter {
   inUseConnections: Connection[]
   connectingConnections: number
   executing: boolean
-  queue: unknown[]
+  queue:  {[key:string]: any}[]
   reconnectConnection: Connection
   numberOfConsecutiveTimeouts: number
   connectionIndex: number
@@ -814,7 +792,7 @@ export class Pool extends EventEmitter {
             reconnectInterval: 1000,
             reconnectTries: 30,
             // Enable domains
-            domainsEnabled: false,
+            // domainsEnabled: false,
             ...options
           }
 
@@ -879,21 +857,26 @@ export class Pool extends EventEmitter {
     };
   }
 
+  /** Make executor available for testing. */
+  static _execute (pool: Pool): () => void {
+    return _execute(pool);
+  }
+
   /** Gets the size of apool. */
   get size(): number {
     return this.options.size;
   }
-  
+
   /** Gets the min size of a pool. */
   get minSize(): number {
     return this.options.minSize;
   }
-  
+
   /** Gets the min size of a pool. */
   get connectionTimeout(): number {
     return this.options.connectionTimeout;
   }
-  
+
   /** Gets the min size of a pool. */
   get socketTimeout(): number {
     return this.options.socketTimeout;
@@ -952,11 +935,11 @@ export class Pool extends EventEmitter {
     }
 
     const self: Pool = this;
-    
+
     stateTransition(this, CONNECTING);
 
     self.connectingConnections++;
-    
+
     connect(self.options, (err?:Error, connection?: Connection): void => {
       self.connectingConnections--;
 
@@ -1003,7 +986,7 @@ export class Pool extends EventEmitter {
       }
 
       stateTransition(self, CONNECTED);
-      
+
       self.availableConnections.push(connection);
 
       if (self.minSize) {
@@ -1017,16 +1000,16 @@ export class Pool extends EventEmitter {
   }
 
   /** Authenticate using a specified mechanism. */
-  auth(credentials?: never, callback?: Callback): void {
+  auth(credentials?: null, callback?: Callback): void {
     this.logger.warn("Pool.prototype.auth is a noop method")
-    
+
     if (typeof callback === 'function') {callback(null, null);}
   }
 
   /** Logout. */
-  logout(dbName?: never, callback?: Callback): void {
+  logout(dbName?:null, callback?: Callback): void {
         this.logger.warn("Pool.prototype.logout is a noop method")
-        
+
     if (typeof callback === 'function') {callback(null, null);}
   };
 
@@ -1034,7 +1017,7 @@ export class Pool extends EventEmitter {
   unref(): void {
     // Get all the known connections
     const connections: Connection[] = this.availableConnections.concat(this.inUseConnections);
-    
+
     connections.forEach((connection: Connection): void => connection.unref());
   };
 
@@ -1043,7 +1026,7 @@ export class Pool extends EventEmitter {
   /** Destroys a pool. */
   destroy(force? :boolean, callback?: Callback): void {
     const self: Pool = this;
-    
+
     // Do not try again if the pool is already dead
     if (this.state === DESTROYED || self.state === DESTROYING) {
       if (typeof callback === 'function') {callback(null, null);}
@@ -1061,7 +1044,7 @@ export class Pool extends EventEmitter {
       // Flush any remaining work items with
       // an error
       while (self.queue.length > 0) {
-        const workItem: unknown = self.queue.shift();
+        const workItem:  {[key:string]: any} = self.queue.shift();
         if (typeof workItem.cb === 'function') {
           workItem.cb(new MongoError('Pool was force destroyed'));
         }
@@ -1083,7 +1066,7 @@ export class Pool extends EventEmitter {
     }
 
     // Wait for the operations to drain before we close the pool
-    function checkStatus() {
+    function checkStatus(): void | number {
       flushMonitoringOperations(self.queue);
 
       if (self.queue.length === 0) {
@@ -1133,74 +1116,66 @@ export class Pool extends EventEmitter {
 
 
 
-  /**
-   * Write a message to MongoDB
-   * @method
-   * @return {Connection}
-   */
-  Pool.prototype.write = function(command, options, cb) {
-    var self = this;
+  /** Write a message to MongoDB. */
+  write(command: {[key:string]: any}, options: any = {}, callback: Callback=noop): void {
+    const self: Pool = this;
+
     // Ensure we have a callback
     if (typeof options === 'function') {
-      cb = options;
+      callback = options;
+      options = {}
     }
 
     // Always have options
     options = options || {};
 
     // We need to have a callback function unless the message returns no response
-    if (!(typeof cb === 'function') && !options.noResponse) {
-      throw new MongoError('write method must provide a callback');
+    if (typeof callback !== 'function' && !options.noResponse) {
+      throw new MongoError('Pool.prototype.write must have a callback');
     }
 
     // Pool was destroyed error out
     if (this.state === DESTROYED || this.state === DESTROYING) {
       // Callback with an error
-      if (cb) {
-        try {
-          cb(new MongoError('pool destroyed'));
-        } catch (err) {
-          process.nextTick(function() {
-            throw err;
-          });
-        }
+      if (callback) {
+        callback(new MongoError('Pool is destroyed, cannot write to it.'))
       }
 
       return;
     }
 
-    if (this.options.domainsEnabled && process.domain && typeof cb === 'function') {
-      // if we have a domain bind to it
-      var oldCb = cb;
-      cb = process.domain.bind(function() {
-        // v8 - argumentsToArray one-liner
-        var args = new Array(arguments.length);
-        for (var i = 0; i < arguments.length; i++) {
-          args[i] = arguments[i];
-        }
-        // bounce off event loop so domain switch takes place
-        process.nextTick(function() {
-          oldCb.apply(null, args);
-        });
-      });
-    }
+    // if (this.options.domainsEnabled && process.domain && typeof cb === 'function') {
+    //   // if we have a domain bind to it
+    //   var oldCb = cb;
+    //   cb = process.domain.bind(function() {
+    //     // v8 - argumentsToArray one-liner
+    //     var args = new Array(arguments.length);
+    //     for (var i = 0; i < arguments.length; i++) {
+    //       args[i] = arguments[i];
+    //     }
+    //     // bounce off event loop so domain switch takes place
+    //     process.nextTick(function() {
+    //       oldCb.apply(null, args);
+    //     });
+    //   });
+    // }
 
     // Do we have an operation
-    var operation = {
-      cb: cb,
+    const operation: {[key:string]: any} = {
+      cb: callback,
       raw: false,
-      promoteLongs: true,
+      // promoteLongs: true,
       promoteValues: true,
-      promoteBuffers: false,
+      // promoteBuffers: false,
       fullResult: false
     };
 
     // Set the options for the parsing
-    operation.promoteLongs = typeof options.promoteLongs === 'boolean' ? options.promoteLongs : true;
+    // operation.promoteLongs = typeof options.promoteLongs === 'boolean' ? options.promoteLongs : true;
     operation.promoteValues =
       typeof options.promoteValues === 'boolean' ? options.promoteValues : true;
-    operation.promoteBuffers =
-      typeof options.promoteBuffers === 'boolean' ? options.promoteBuffers : false;
+    // operation.promoteBuffers =
+    //   typeof options.promoteBuffers === 'boolean' ? options.promoteBuffers : false;
     operation.raw = typeof options.raw === 'boolean' ? options.raw : false;
     operation.immediateRelease =
       typeof options.immediateRelease === 'boolean' ? options.immediateRelease : false;
@@ -1223,10 +1198,12 @@ export class Pool extends EventEmitter {
 
     // If command monitoring is enabled we need to modify the callback here
     if (self.options.monitorCommands) {
-      this.emit('commandStarted', new apm.CommandStartedEvent(this, command));
+      self.emit('commandStarted', new apm.CommandStartedEvent(this, command));
 
-      operation.started = process.hrtime();
-      operation.cb = (err, reply) => {
+      // operation.started = process.hrtime();
+      operation.started = performance.now()
+
+      operation.cb = (err: Error, reply: {[key:string]: any}): void => {
         if (err) {
           self.emit(
             'commandFailed',
@@ -1246,13 +1223,16 @@ export class Pool extends EventEmitter {
           }
         }
 
-        if (typeof cb === 'function') cb(err, reply);
+        if (typeof callback === 'function'){ callback(err, reply);}
       };
     }
 
     // Prepare the operation buffer
-    serializeCommand(self, command, (err, serializedBuffers) => {
-      if (err) throw err;
+    serializeCommand(self, command, (err: Error, serializedBuffers: Uint8Array[]): any => {
+      // if (err) throw err;
+      if (err) {
+        return callback(err, null)
+      }
 
       // Set the operation's buffer to the serialization of the commands
       operation.buffer = serializedBuffers;
@@ -1267,9 +1247,10 @@ export class Pool extends EventEmitter {
 
       // Attempt to execute the operation
       if (!self.executing) {
-        process.nextTick(function() {
-          _execute(self)();
-        });
+        // process.nextTick(function() {
+        //   _execute(self)();
+        // });
+        setTimeout((): void => _execute(self)(), 0)
       }
     });
   };
@@ -1390,7 +1371,7 @@ export class Pool extends EventEmitter {
 //     return this.options.size;
 //   }
 // });
-// 
+//
 //   /** Min size of a pool. */
 // Object.defineProperty(Pool.prototype, 'minSize', {
 //   enumerable: true,
@@ -1398,7 +1379,7 @@ export class Pool extends EventEmitter {
 //     return this.options.minSize;
 //   }
 // });
-// 
+//
 //   /** Connection timeout setting of a pool. */
 // Object.defineProperty(Pool.prototype, 'connectionTimeout', {
 //   enumerable: true,
@@ -1406,7 +1387,7 @@ export class Pool extends EventEmitter {
 //     return this.options.connectionTimeout;
 //   }
 // });
-// 
+//
 //   /** Socket timeout setting of a pool. */
 // Object.defineProperty(Pool.prototype, 'socketTimeout', {
 //   enumerable: true,
@@ -1419,64 +1400,10 @@ export class Pool extends EventEmitter {
 
 
 
+//
+// // // Make execution loop available for testing
+// // Pool._execute = _execute;
+//
 
-// Make execution loop available for testing
-Pool._execute = _execute;
 
-/**
- * A server connect event, used to verify that the connection is up and running
- *
- * @event Pool#connect
- * @type {Pool}
- */
-
-/**
- * A server reconnect event, used to verify that pool reconnected.
- *
- * @event Pool#reconnect
- * @type {Pool}
- */
-
-/**
- * The server connection closed, all pool connections closed
- *
- * @event Pool#close
- * @type {Pool}
- */
-
-/**
- * The server connection caused an error, all pool connections closed
- *
- * @event Pool#error
- * @type {Pool}
- */
-
-/**
- * The server connection timed out, all pool connections closed
- *
- * @event Pool#timeout
- * @type {Pool}
- */
-
-/**
- * The driver experienced an invalid message, all pool connections closed
- *
- * @event Pool#parseError
- * @type {Pool}
- */
-
-/**
- * The driver attempted to reconnect
- *
- * @event Pool#attemptReconnect
- * @type {Pool}
- */
-
-/**
- * The driver exhausted all reconnect attempts
- *
- * @event Pool#reconnectFailed
- * @type {Pool}
- */
-
-module.exports = Pool;
+// module.exports = Pool;

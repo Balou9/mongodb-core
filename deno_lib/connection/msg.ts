@@ -49,7 +49,7 @@ export interface MsgOptions {
   readPreference?: ReadPreference;
   serializeFunctions?: boolean
   checkKeys?: boolean
-  maxBSONSize?: number
+  maxBsonSize?: number
   moreToCome?: boolean
 }
 
@@ -62,7 +62,7 @@ readonly  requestId: number
 
   // serializeFunctions: boolean;
   // checkKeys: boolean;
-  // maxBSONSize: number;
+  // maxBsonSize: number;
   checksumPresent: boolean
   moreToCome: boolean
   exhaustAllowed: boolean
@@ -94,7 +94,7 @@ readonly  requestId: number
       // this.ignoreUndefined =
       //   typeof options.ignoreUndefined === 'boolean' ? options.ignoreUndefined : false;
       checkKeys : typeof options.checkKeys === 'boolean' ? options.checkKeys : false,
-      maxBSONSize : options.maxBSONSize || 1024 * 1024 * 16
+      maxBsonSize : options.maxBsonSize || 1024 * 1024 * 16
     };
     
     // flags

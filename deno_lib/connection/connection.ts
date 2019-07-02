@@ -65,7 +65,7 @@ let connections: { [key:number]: Connection} = {};
 export const CONNECTION_EVENT_NAMES: string[] = ['error', 'close', 'timeout', 'parseError', 'connect', 'message'];
 
 export interface ConnectionOptions {
-  maxBSONMessageSize?: number;
+  maxBsonMessageSize?: number;
   port?: number
   host?:string
   socketTimeout?: number
@@ -85,7 +85,7 @@ export class Connection extends EventEmitter {
   readonly id: number;
   readonly options: ConnectionOptions;
   readonly logger: Logger
-  readonly maxBSONMessageSize: number
+  readonly maxBsonMessageSize: number
   readonly port: number
   readonly host: string
   readonly socketTimeout: number
@@ -101,7 +101,8 @@ export class Connection extends EventEmitter {
   writeStream: unknown
   destroyed: boolean
   hashedName: string
-  workItems: unknown[]
+  workItems: {[key:string]: any}[]
+  lastIsMasterMs:number
 
   bytesRead: number;
   sizeOfMessage: number
@@ -142,7 +143,7 @@ export class Connection extends EventEmitter {
     this.logger = Logger('Connection', options);
     // this.bson = options.bson;
     // this.tag = options.tag;
-    this.maxBSONMessageSize = options.maxBSONMessageSize || DEFAULT_MAX_BSON_MESSAGE_SIZE;
+    this.maxBsonMessageSize = options.maxBsonMessageSize || DEFAULT_MAX_BSON_MESSAGE_SIZE;
 
     this.port = options.port || 27017;
     this.host = options.host || 'localhost';
@@ -547,7 +548,7 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
             // Retrieve the message size
             const sizeOfMessage: number = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
             // If we have a negative sizeOfMessage emit error and return
-            if (sizeOfMessage < 0 || sizeOfMessage > connection.maxBSONMessageSize) {
+            if (sizeOfMessage < 0 || sizeOfMessage > connection.maxBsonMessageSize) {
               const errorObject: { [key:string]: any } = {
                 err: 'socketHandler',
                 trace: '',
@@ -566,7 +567,7 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
             // Ensure that the size of message is larger than 0 and less than the max allowed
             if (
               sizeOfMessage > 4 &&
-              sizeOfMessage < connection.maxBSONMessageSize &&
+              sizeOfMessage < connection.maxBsonMessageSize &&
               sizeOfMessage > data.length
             ) {
               connection.buffer = new Uint8Array(sizeOfMessage);
@@ -583,7 +584,7 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
               data = new Uint8Array(0);
             } else if (
               sizeOfMessage > 4 &&
-              sizeOfMessage < connection.maxBSONMessageSize &&
+              sizeOfMessage < connection.maxBsonMessageSize &&
               sizeOfMessage === data.byteLength
             ) {
               const emitBuffer: Uint8Array = data;
@@ -596,7 +597,7 @@ function dataHandler(connection: Connection): (data: Uint8Array) => void {
               data = new Uint8Array(0);
               // Emit the message
               processMessage(connection, emitBuffer);
-            } else if (sizeOfMessage <= 4 || sizeOfMessage > connection.maxBSONMessageSize) {
+            } else if (sizeOfMessage <= 4 || sizeOfMessage > connection.maxBsonMessageSize) {
               const errorObject: {[key:string]: any} = {
                 err: 'socketHandler',
                 trace: null,
