@@ -1,34 +1,47 @@
 // 'use strict';
-const EventEmitter = require('events');
-const ServerDescription = require('./server_description').ServerDescription;
-const ServerType = require('./server_description').ServerType;
-const TopologyDescription = require('./topology_description').TopologyDescription;
-const TopologyType = require('./topology_description').TopologyType;
-const monitoring = require('./monitoring');
-const calculateDurationInMs = require('../utils').calculateDurationInMs;
-const MongoTimeoutError = require('../error').MongoTimeoutError;
-const Server = require('./server');
-const relayEvents = require('../utils').relayEvents;
-const ReadPreference = require('../topologies/read_preference');
-const readPreferenceServerSelector = require('./server_selectors').readPreferenceServerSelector;
-const writableServerSelector = require('./server_selectors').writableServerSelector;
-const isRetryableWritesSupported = require('../topologies/shared').isRetryableWritesSupported;
-const Cursor = require('../cursor');
-const deprecate = require('util').deprecate;
-const BSON = require('../connection/utils').retrieveBSON();
-const createCompressionInfo = require('../topologies/shared').createCompressionInfo;
-const isRetryableError = require('../error').isRetryableError;
-const MongoParseError = require('../error').MongoParseError;
-const ClientSession = require('../sessions').ClientSession;
-const createClientInfo = require('../topologies/shared').createClientInfo;
-const MongoError = require('../error').MongoError;
-const resolveClusterTime = require('../topologies/shared').resolveClusterTime;
+// const EventEmitter = require('events');
+import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
+import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
+// const ServerDescription = require('./server_description').ServerDescription;
+import { ServerType, ServerDescription} from "./server_description.ts"
+// const ServerType = require('./server_description').ServerType;
+// const TopologyDescription = require('./topology_description').TopologyDescription;
+import { TopologyType, TopologyDescription } from "./topology_description.ts"
+// const TopologyType = require('./topology_description').TopologyType;
+// const monitoring = require('./monitoring');
+import * as monitoring from "./monitoring.ts"
+// const calculateDurationInMs = require('../utils').calculateDurationInMs;
+import { calculateDurationInMs, relayEvents } from "./../utils.ts"
+// const MongoTimeoutError = require('../error').MongoTimeoutError;
+import { MongoError, MongoParseError, MongoTimeoutError, isRetryableError} from "./../errors.ts"
+// const Server = require('./server');
+import { Server} from "./server.ts"
+// const relayEvents = require('../utils').relayEvents;
+// const ReadPreference = require('../topologies/read_preference');
+import { ReadPreference } from "./../topologies/read_preference.ts"
+// const readPreferenceServerSelector = require('./server_selectors').readPreferenceServerSelector;
+import { readPreferenceServerSelector, writableServerSelector} from "./server_selectors.ts"
+// const writableServerSelector = require('./server_selectors').writableServerSelector;
+// const isRetryableWritesSupported = require('../topologies/shared').isRetryableWritesSupported;
+import { createClientInfo,createCompressionInfo, isRetryableWritesSupported,resolveClusterTime} from "./../topologies/shared.ts"
+// const Cursor = require('../cursor');
+import { Cursor } from "./../cursor.ts"
+// const deprecate = require('util').deprecate;
+// const BSON = require('../connection/utils').retrieveBSON();
+// const createCompressionInfo = require('../topologies/shared').createCompressionInfo;
+// const isRetryableError = require('../error').isRetryableError;
+// const MongoParseError = require('../error').MongoParseError;
+// const ClientSession = require('../sessions').ClientSession;
+import {ClientSession} from "./../sessions.ts"
+// const createClientInfo = require('../topologies/shared').createClientInfo;
+// const MongoError = require('../error').MongoError;
+// const resolveClusterTime = require('../topologies/shared').resolveClusterTime;
 
 // Global state
-let globalTopologyCounter = 0;
+let globalTopologyCounter: number = 0;
 
 // Constants
-const TOPOLOGY_DEFAULTS = {
+const TOPOLOGY_DEFAULTS: {[key:string]: number} = {
   localThresholdMS: 15,
   serverSelectionTimeoutMS: 10000,
   heartbeatFrequencyMS: 30000,
@@ -36,7 +49,7 @@ const TOPOLOGY_DEFAULTS = {
 };
 
 // events that we relay to the `Topology`
-const SERVER_RELAY_EVENTS = [
+const SERVER_RELAY_EVENTS: string[] = [
   'serverHeartbeatStarted',
   'serverHeartbeatSucceeded',
   'serverHeartbeatFailed',
@@ -49,13 +62,29 @@ const SERVER_RELAY_EVENTS = [
 ];
 
 // all events we listen to from `Server` instances
-const LOCAL_SERVER_EVENTS = SERVER_RELAY_EVENTS.concat([
+const LOCAL_SERVER_EVENTS: string[] = SERVER_RELAY_EVENTS.concat([
   'error',
   'connect',
   'descriptionReceived',
   'close',
   'ended'
 ]);
+
+export interface TopologyOptions {
+  host?: string;
+  port?: number
+  localThresholdMS?: number;
+  serverSelectionTimeoutMS?: number;
+  heartbeatFrequencyMS?: number;
+  minHeartbeatFrequencyMS?:number;
+  replicaSet?: unknown
+  minHeartbeatIntervalMS?: number
+  cursorFactory?: unknown
+  credentials?: unknown
+  compression?: {
+    compressors?: unknown
+  };
+}
 
 /**
  * A container of server instances representing a connection to a MongoDB topology.
@@ -70,19 +99,50 @@ const LOCAL_SERVER_EVENTS = SERVER_RELAY_EVENTS.concat([
  * @fires Topology#serverHeartbeatSucceeded
  * @fires Topology#serverHeartbeatFailed
  */
-class Topology extends EventEmitter {
-  /**
-   * Create a topology
-   *
-   * @param {Array|String} [seedlist] a string list, or array of Server instances to connect to
-   * @param {Object} [options] Optional settings
-   * @param {Number} [options.localThresholdMS=15] The size of the latency window for selecting among multiple suitable servers
-   * @param {Number} [options.serverSelectionTimeoutMS=30000] How long to block for server selection before throwing an error
-   * @param {Number} [options.heartbeatFrequencyMS=10000] The frequency with which topology updates are scheduled
-   */
-  constructor(seedlist, options) {
+export class Topology extends EventEmitter {
+  readonly s: {
+    // the id of this topology
+    id: number;
+    // passed in options
+    options: TopologyOptions
+    // initial seedlist of servers to connect to
+    seedlist: string[]
+    // the topology description
+    description:  TopologyDescription,
+    serverSelectionTimeoutMS: number
+    heartbeatFrequencyMS: number
+    minHeartbeatIntervalMS: number
+    // allow users to override the cursor factory
+    Cursor: Cursor,
+    // the bson parser
+    // bson: options.bson || new BSON(),
+    // a map of server instances to normalized addresses
+    servers: Map<string,ServerDescription>
+    // Server Session Pool
+    sessionPool: Pool
+    // Active client sessions
+    sessions: Session[],
+    // Promise library
+    // promiseLibrary: options.promiseLibrary || Promise,
+    credentials: MogoCredentials
+    clusterTime: unknown
+    clientInfo?: unknown
+  }
+  // /**
+  //  * Create a topology
+  //  *
+  //  * @param {Array|String} [seedlist] a string list, or array of Server instances to connect to
+  //  * @param {Object} [options] Optional settings
+  //  * @param {Number} [options.localThresholdMS=15] The size of the latency window for selecting among multiple suitable servers
+  //  * @param {Number} [options.serverSelectionTimeoutMS=30000] How long to block for server selection before throwing an error
+  //  * @param {Number} [options.heartbeatFrequencyMS=10000] The frequency with which topology updates are scheduled
+  //  */
+
+  constructor(seedlist: any = [], options: TopologyOptions = {}) {
     super();
-    if (typeof options === 'undefined' && typeof seedlist !== 'string') {
+
+    // if (typeof options === 'undefined' && typeof seedlist !== 'string') {
+    if (seedlist.constructor === Object) {
       options = seedlist;
       seedlist = [];
 
@@ -92,19 +152,24 @@ class Topology extends EventEmitter {
       }
     }
 
-    seedlist = seedlist || [];
+    // seedlist = seedlist || [];
     if (typeof seedlist === 'string') {
       seedlist = parseStringSeedlist(seedlist);
     }
 
-    options = Object.assign({}, TOPOLOGY_DEFAULTS, options);
+    // options = Object.assign({}, TOPOLOGY_DEFAULTS, options);
+    options = { ...TOPOLOGY_DEFAULTS, ...options}
 
-    const topologyType = topologyTypeFromSeedlist(seedlist, options);
-    const topologyId = globalTopologyCounter++;
-    const serverDescriptions = seedlist.reduce((result, seed) => {
-      if (seed.domain_socket) seed.host = seed.domain_socket;
-      const address = seed.port ? `${seed.host}:${seed.port}` : `${seed.host}:27017`;
+    const topologyType: string = topologyTypeFromSeedlist(seedlist, options);
+    const topologyId: number = globalTopologyCounter++;
+
+    const serverDescriptions:Map<string, ServerDescription> = seedlist.reduce((result:Map<string, ServerDescription>, seed: ServerDescription):Map<string, ServerDescription> => {
+      if (seed.domain_socket) {seed.host = seed.domain_socket;}
+
+      const address: string = seed.port ? `${seed.host}:${seed.port}` : `${seed.host}:27017`;
+
       result.set(address, new ServerDescription(address));
+
       return result;
     }, new Map());
 
@@ -131,7 +196,7 @@ class Topology extends EventEmitter {
       // allow users to override the cursor factory
       Cursor: options.cursorFactory || Cursor,
       // the bson parser
-      bson: options.bson || new BSON(),
+      // bson: options.bson || new BSON(),
       // a map of server instances to normalized addresses
       servers: new Map(),
       // Server Session Pool
@@ -139,7 +204,7 @@ class Topology extends EventEmitter {
       // Active client sessions
       sessions: [],
       // Promise library
-      promiseLibrary: options.promiseLibrary || Promise,
+      // promiseLibrary: options.promiseLibrary || Promise,
       credentials: options.credentials,
       clusterTime: null
     };
@@ -151,24 +216,22 @@ class Topology extends EventEmitter {
     this.s.clientInfo = createClientInfo(options);
   }
 
-  /**
-   * @return A `TopologyDescription` for this topology
-   */
-  get description() {
+  /** A `TopologyDescription` for this topology. */
+  get description(): TopologyDescription {
     return this.s.description;
   }
 
-  get parserType() {
-    return BSON.native ? 'c++' : 'js';
-  }
+  // get parserType() {
+  //   return BSON.native ? 'c++' : 'js';
+  // }
 
   /**
    * All raw connections
    * @method
    * @return {Connection[]}
    */
-  connections() {
-    return Array.from(this.s.servers.values()).reduce((result, server) => {
+  connections(): Connection[] {
+    return Array.from(this.s.servers.values()).reduce((result:Connection[], server: ServerDescription):Connection[] => {
       return result.concat(server.s.pool.allConnections());
     }, []);
   }
