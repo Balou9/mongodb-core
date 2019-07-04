@@ -11,7 +11,7 @@ import { TopologyType, TopologyDescription } from "./topology_description.ts"
 // const monitoring = require('./monitoring');
 import * as monitoring from "./monitoring.ts"
 // const calculateDurationInMs = require('../utils').calculateDurationInMs;
-import { calculateDurationInMs, relayEvents } from "./../utils.ts"
+import { Callback, calculateDurationInMs, noop, relayEvents } from "./../utils.ts"
 // const MongoTimeoutError = require('../error').MongoTimeoutError;
 import { MongoError, MongoParseError, MongoTimeoutError, isRetryableError} from "./../errors.ts"
 // const Server = require('./server');
@@ -25,6 +25,8 @@ import { readPreferenceServerSelector, writableServerSelector} from "./server_se
 // const isRetryableWritesSupported = require('../topologies/shared').isRetryableWritesSupported;
 import { createClientInfo,createCompressionInfo, isRetryableWritesSupported,resolveClusterTime} from "./../topologies/shared.ts"
 // const Cursor = require('../cursor');
+import { Pool } from "./../connection/pool.ts"
+import { Connection } from "./../connection/connection.ts"
 import { Cursor } from "./../cursor.ts"
 // const deprecate = require('util').deprecate;
 // const BSON = require('../connection/utils').retrieveBSON();
@@ -69,6 +71,9 @@ const LOCAL_SERVER_EVENTS: string[] = SERVER_RELAY_EVENTS.concat([
   'close',
   'ended'
 ]);
+
+// server state connecting constant
+const STATE_CONNECTING: number = 1;
 
 export interface TopologyOptions {
   host?: string;
@@ -124,9 +129,10 @@ export class Topology extends EventEmitter {
     sessions: Session[],
     // Promise library
     // promiseLibrary: options.promiseLibrary || Promise,
-    credentials: MogoCredentials
+    credentials: MongoCredentials
     clusterTime: unknown
-    clientInfo?: unknown
+    clientInfo: unknown
+    connected: boolean
   }
   // /**
   //  * Create a topology
@@ -206,7 +212,9 @@ export class Topology extends EventEmitter {
       // Promise library
       // promiseLibrary: options.promiseLibrary || Promise,
       credentials: options.credentials,
-      clusterTime: null
+      clusterTime: null,
+      clientInfo: null,
+      connected: false
     };
 
     // amend options for server instance creation
@@ -243,9 +251,14 @@ export class Topology extends EventEmitter {
    * @param {Array} [options.auth=null] Array of auth options to apply on connect
    * @param {function} [callback] An optional callback called once on the first connected server
    */
-  connect(options, callback) {
-    if (typeof options === 'function') (callback = options), (options = {});
-    options = options || {};
+  connect(options: any = {}, callback: Callback= noop): void {
+    // if (typeof options === 'function') (callback = options), (options = {});
+    if (typeof options === 'function') {
+      callback = options
+      options = {}
+    }
+
+    // options = options || {};
 
     // emit SDAM monitoring events
     this.emit('topologyOpening', new monitoring.TopologyOpeningEvent(this.s.id));
@@ -261,39 +274,43 @@ export class Topology extends EventEmitter {
     );
 
     connectServers(this, Array.from(this.s.description.servers.values()));
+
     this.s.connected = true;
 
     // otherwise, wait for a server to properly connect based on user provided read preference,
     // or primary.
 
     translateReadPreference(options);
-    const readPreference = options.readPreference || ReadPreference.primary;
 
-    this.selectServer(readPreferenceServerSelector(readPreference), options, (err, server) => {
+    const readPreference: ReadPreference = options.readPreference || ReadPreference.primary;
+
+    this.selectServer(readPreferenceServerSelector(readPreference), options, (err?: Error, server?: Server): void => {
       if (err) {
-        if (typeof callback === 'function') {
-          callback(err, null);
-        } else {
-          this.emit('error', err);
-        }
-
-        return;
+        // if (typeof callback === 'function') {
+        //   callback(err, null);
+        // } else {
+        //   this.emit('error', err);
+        // }
+        //
+        // return;
+        return this.emit('error', err);
       }
 
-      const errorHandler = err => {
+      const errorHandler: (err? :Error) => void = (err?:Error): void => {
         server.removeListener('connect', connectHandler);
-        if (typeof callback === 'function') callback(err, null);
+        // if (typeof callback === 'function') callback(err, null);
+        callback(err, null);
       };
 
-      const connectHandler = (_, err) => {
+      const connectHandler: (_?: unknown, err?: Error)=> void = (_: unknown, err?: Error): void => {
         server.removeListener('error', errorHandler);
         this.emit('open', err, this);
         this.emit('connect', this);
-
-        if (typeof callback === 'function') callback(err, this);
+        // if (typeof callback === 'function') callback(err, this);
+        callback(err, this);
       };
 
-      const STATE_CONNECTING = 1;
+      // const STATE_CONNECTING: number = 1;
       if (server.s.state === STATE_CONNECTING) {
         server.once('error', errorHandler);
         server.once('connect', connectHandler);
@@ -307,38 +324,49 @@ export class Topology extends EventEmitter {
   /**
    * Close this topology
    */
-  close(options, callback) {
-    if (typeof options === 'function') (callback = options), (options = {});
-    options = options || {};
+  close(options: any = {}, callback: Callback = noop): void {
+    // if (typeof options === 'function') (callback = options), (options = {});
+        if (typeof options === 'function') {
+          callback = options
+          options = {}
+        }
+    // options = options || {};
 
     if (this.s.sessionPool) {
       this.s.sessions.forEach(session => session.endSession());
       this.s.sessionPool.endAllPooledSessions();
     }
 
-    const servers = this.s.servers;
+    const servers: Map<string, ServerDescription> = this.s.servers;
+
     if (servers.size === 0) {
       this.s.connected = false;
-      if (typeof callback === 'function') {
-        callback(null, null);
-      }
 
-      return;
+      // if (typeof callback === 'function') {
+      //   callback(null, null);
+      // }
+
+      return  callback(null, null);
+
+      // return;
     }
 
     // destroy all child servers
-    let destroyed = 0;
-    servers.forEach(server =>
-      destroyServer(server, this, () => {
-        destroyed++;
-        if (destroyed === servers.size) {
+    let destroyed: number = 0;
+
+    servers.forEach((server: ServerDescription): void =>
+      destroyServer(server, this, (): void => {
+        // destroyed++;
+
+        if (++destroyed === servers.size) {
           // emit an event for close
           this.emit('topologyClosed', new monitoring.TopologyClosedEvent(this.s.id));
 
           this.s.connected = false;
-          if (typeof callback === 'function') {
-            callback(null, null);
-          }
+          // if (typeof callback === 'function') {
+          //   callback(null, null);
+          // }
+          callback(null, null);
         }
       })
     );
@@ -353,33 +381,40 @@ export class Topology extends EventEmitter {
    * @param {function} callback The callback used to indicate success or failure
    * @return {Server} An instance of a `Server` meeting the criteria of the predicate provided
    */
-  selectServer(selector, options, callback) {
+  selectServer(selector: Function, options: any = {}, callback: Callback = noop): void {
     if (typeof options === 'function') {
       callback = options;
+
       if (typeof selector !== 'function') {
         options = selector;
 
         translateReadPreference(options);
-        const readPreference = options.readPreference || ReadPreference.primary;
+
+        const readPreference: ReadPreference = options.readPreference || ReadPreference.primary;
+
         selector = readPreferenceServerSelector(readPreference);
       } else {
         options = {};
       }
     }
 
-    options = Object.assign(
-      {},
-      { serverSelectionTimeoutMS: this.s.serverSelectionTimeoutMS },
-      options
-    );
+    options = {
+      serverSelectionTimeoutMS: this.s.serverSelectionTimeoutMS,
+      ...options
+    }
+    // Object.assign(
+    //   {},
+    //   { serverSelectionTimeoutMS: this.s.serverSelectionTimeoutMS },
+    //   options
+    // );
 
-    const isSharded = this.description.type === TopologyType.Sharded;
-    const session = options.session;
-    const transaction = session && session.transaction;
+    const isSharded: boolean = this.description.type === TopologyType.Sharded;
+    const session: Session = options.session;
+    const transaction: Transaction = session && session.transaction;
 
     if (isSharded && transaction && transaction.server) {
-      callback(null, transaction.server);
-      return;
+      return callback(null, transaction.server);
+      // return;
     }
 
     selectServers(
@@ -387,10 +422,13 @@ export class Topology extends EventEmitter {
       selector,
       options.serverSelectionTimeoutMS,
       process.hrtime(),
-      (err, servers) => {
-        if (err) return callback(err, null);
+      (err?: Error, servers: unknown): void => {
+        if (err) {
+          return callback(err, null);
+        }
 
         const selectedServer = randomSelection(servers);
+
         if (isSharded && transaction && transaction.isActive) {
           transaction.pinServer(selectedServer);
         }
