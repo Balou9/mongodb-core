@@ -1000,17 +1000,17 @@ export class Pool extends EventEmitter {
   }
 
   /** Authenticate using a specified mechanism. */
-  auth(credentials?: null, callback?: Callback): void {
+  auth(credentials?: null, callback: Callback=noop): void {
     this.logger.warn("Pool.prototype.auth is a noop method")
-
-    if (typeof callback === 'function') {callback(null, null);}
+callback(null, null)
+    // if (typeof callback === 'function') {callback(null, null);}
   }
 
   /** Logout. */
-  logout(dbName?:null, callback?: Callback): void {
+  logout(dbName?:null, callback: Callback=noop): void {
         this.logger.warn("Pool.prototype.logout is a noop method")
-
-    if (typeof callback === 'function') {callback(null, null);}
+callback(null, null)
+    // if (typeof callback === 'function') {callback(null, null);}
   };
 
   /** Unrefs the pool. */

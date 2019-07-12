@@ -4,7 +4,10 @@
 // const requireOptional = require('require_optional');
 
 /** Generic representation of a node-style callback. */
-export type Callback = (err?:any, data?:any, ...rest: any[]) => any;
+// export type Callback = (err?:any, data?:any, ...rest: any[]) => any;
+export interface Callback {
+  (err?:any, data?:any, ...rest: any[]) : any
+}
 
 /** Noop function. */
 export function noop(): void {}

@@ -31,6 +31,10 @@ import {MongoCredentials} from "./../auth/mongo_credentials.ts"
 // const debugOptions = require('../connection/utils').debugOptions;
 import { debugOptions} from "./../connection/utils.ts"
 
+interface ServerOpCallback extends Callback {
+  operationId: number
+}
+
 // Used for filtering out fields for logging
 const DEBUG_FIELDS: string[] = [
   'reconnect',
@@ -300,7 +304,7 @@ export class Server extends EventEmitter {
    *   + [fullResult=false]
    *   + [session=null]
    */
-  insert(ns: string, ops:{[key:string]: any}[], options:any={}, callback: Callback = noop): void {
+  insert(ns: string, ops:{[key:string]: any}[], options:any={}, callback: ServerOpCallback  = noop): void {
     executeWriteOperation({ server: this, op: 'insert', ns, ops }, options, callback);
   }
 
@@ -313,7 +317,7 @@ export class Server extends EventEmitter {
    *   + [fullResult=false]
    *   + [session=null]
    */
-  update(ns: string, ops:{[key:string]: any}[], options: any = {}, callback: Callback = noop): void {
+  update(ns: string, ops:{[key:string]: any}[], options: any = {}, callback: ServerOpCallback  = noop): void {
     executeWriteOperation({ server: this, op: 'update', ns, ops }, options, callback);
   }
 
@@ -326,7 +330,7 @@ export class Server extends EventEmitter {
    *   + [fullResult=false]
    *   + [session=null]
    */
-  remove(ns: string, ops:{[key:string]: any}[], options: any = {}, callback: Callback = noop): void {
+  remove(ns: string, ops:{[key:string]: any}[], options: any = {}, callback: ServerOpCallback  = noop): void {
     executeWriteOperation({ server: this, op: 'remove', ns, ops }, options, callback);
   }
 }
