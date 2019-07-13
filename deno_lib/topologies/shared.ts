@@ -1,3 +1,22 @@
+// 'use strict';
+
+// const os = require('os');
+// const f = require('util').format;
+// const ReadPreference = require('./read_preference');
+// const Buffer = require('safe-buffer').Buffer;
+// const TopologyType = require('../sdam/topology_description').TopologyType;
+import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
+  import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
+import {ReadPreference} from "./read_preference.ts"
+import {TopologyType} from "./../sdam/topology_description.ts"
+import {ServerType, ServerDescription} from "./../sdam/server_description.ts"
+  import { MONGODB_CORE_VERSION } from "./../meta.ts"
+  import {MongoError} from "errors.ts"
+import { Callback,calculateDurationInMS, clone, noop} from "./../utils.ts"
+import { CommandResult} from "./../connection/command_result.ts" 
+
+const RETRYABLE_WIRE_VERSION: number = 6;
+
 /** MongoDB client information. */
 export interface ClientInfo {
   driver: {
@@ -13,22 +32,6 @@ export interface ClientInfo {
 platform: string;
  application?: { name: string}
 }
-
-// 'use strict';
-
-// const os = require('os');
-// const f = require('util').format;
-// const ReadPreference = require('./read_preference');
-// const Buffer = require('safe-buffer').Buffer;
-// const TopologyType = require('../sdam/topology_description').TopologyType;
-  import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
-import {ReadPreference} from "./read_preference.ts"
-import {TopologyType} from "./../sdam/topology_description.ts"
-import {ServerType, ServerDescription} from "./../sdam/server_description.ts"
-  import { MONGODB_CORE_VERSION } from "./../meta.ts"
-  import {MongoError} from "errors.ts"
-import { Callback,calculateDurationInMS, clone, noop} from "./../utils.ts"
-import { CommandResult} from "./../connection/command_result.ts" 
 
 /** Emit event if it exists. */
 function emitSDAMEvent(self: EventEmitter, eventName: string, description: any): void {
@@ -49,7 +52,7 @@ const arch: string = Deno.platform.arch
 // var release = os.release();
 
 /** Creates a client info object. */
-function createClientInfo(options: {[key:string]:any}): ClientInfo {
+export function createClientInfo(options: {[key:string]:any}): ClientInfo {
   // Build default client information
   const clientInfo: {[key:string]:any} = options.clientInfo.constructor.name === "Object"
     ? clone(options.clientInfo)
@@ -90,7 +93,7 @@ function createClientInfo(options: {[key:string]:any}): ClientInfo {
 }
 
 /** Creates compression info from given options. */
-function createCompressionInfo(options:{[key:string]:any}):string[] {
+export function createCompressionInfo(options:{[key:string]:any}):string[] {
   if (!options.compression || !options.compression.compressors) {
     return [];
   }
@@ -121,7 +124,7 @@ function getPreviousServerDescription(self: any):any {
 }
 
 /** Emits a server description change event. */
-function emitServerDescriptionChanged (self: EventEmitter, description: any): void {
+export function emitServerDescriptionChanged (self: EventEmitter, description: any): void {
   if (self.listeners('serverDescriptionChanged').length ) {
     // Emit the server description changed events
     self.emit('serverDescriptionChanged', {
@@ -156,7 +159,7 @@ function getPreviousTopologyDescription(self: any): any {
 }
 
 /** Emits a topology description change event. */
-function emitTopologyDescriptionChanged(self: EventEmitter, description: any): void {
+export function emitTopologyDescriptionChanged(self: EventEmitter, description: any): void {
   if (self.listeners('topologyDescriptionChanged').length) {
     // Emit the server description changed events
     self.emit('topologyDescriptionChanged', {
@@ -180,7 +183,7 @@ function changedIsMaster(self: any, currentIsmaster?: {[key:string]: any}, ismas
   // return false;
 }
 
-function getTopologyType(self: any, ismaster?: {[key:string]: any}): string {
+export function getTopologyType(self: any, ismaster?: {[key:string]: any}): string {
   if (!ismaster) {
     ismaster = self.ismaster;
   }
@@ -200,7 +203,7 @@ function getTopologyType(self: any, ismaster?: {[key:string]: any}): string {
   return 'Unknown';
 }
 
-function inquireServerState (self: any): (callback: Callback) => void {
+export function inquireServerState (self: any): (callback: Callback) => void {
   return (callback?: Callback):void => {
     if (self.s.state === 'destroyed'){ return;}
     // Record response time
@@ -296,7 +299,7 @@ function inquireServerState (self: any): (callback: Callback) => void {
 // }
 
 /** A custom interval representation. */
-class Interval {
+export class Interval {
   timer: number = NaN;
   fn: Function
   time: number
@@ -330,7 +333,7 @@ class Interval {
 }
 
 /** A custom timeout representation. */
-class Timeout {
+export class Timeout {
   timer: number = NaN;
   fn: Function
   time: number
@@ -385,7 +388,7 @@ class Timeout {
 //   };
 // }
 
-function diff(previous: {servers: ServerDescription[], [key:string]:any}= { servers: [] }, current: {servers: ServerDescription[], [key:string]:any}= { servers: [] }): {servers: ServerDescription[]} {
+export function diff(previous: {servers: ServerDescription[], [key:string]:any}= { servers: [] }, current: {servers: ServerDescription[], [key:string]:any}= { servers: [] }): {servers: ServerDescription[]} {
   // Difference document
   const diff:  {servers: ServerDescription[]} = {  servers: [] };
 
@@ -465,26 +468,18 @@ function diff(previous: {servers: ServerDescription[], [key:string]:any}= { serv
   return diff;
 }
 
-/**
- * Shared function to determine clusterTime for a given topology
- *
- * @param {*} topology
- * @param {*} clusterTime
- */
-function resolveClusterTime(topology, $clusterTime) {
-  if (topology.clusterTime == null) {
+/** Shared function to determine clusterTime for a given topology.  */
+export function resolveClusterTime(topology:{clusterTime?: { clusterTime: number | BSON.LONG }}, $clusterTime: { clusterTime: BSON.LONG}): void {
+  if (!topology.clusterTime ||
+      $clusterTime.clusterTime.greaterThan(topology.clusterTime.clusterTime)) {
     topology.clusterTime = $clusterTime;
-  } else {
-    if ($clusterTime.clusterTime.greaterThan(topology.clusterTime.clusterTime)) {
-      topology.clusterTime = $clusterTime;
-    }
   }
 }
 
 // NOTE: this is a temporary move until the topologies can be more formally refactored
 //       to share code.
-const SessionMixins = {
-  endSessions: function(sessions, callback) {
+export const SessionMixins: {endSessions(sessions: Session | Session[], callback: Callback): void} = {
+  endSessions(sessions: Session | Session[], callback: Callback = noop): void {
     if (!Array.isArray(sessions)) {
       sessions = [sessions];
     }
@@ -499,15 +494,13 @@ const SessionMixins = {
       'admin.$cmd',
       { endSessions: sessions },
       { readPreference: ReadPreference.primaryPreferred },
-      () => {
-        // intentionally ignored, per spec
-        if (typeof callback === 'function') callback();
-      }
+      callback
     );
   }
 };
 
-function topologyType(topology) {
+/** Deduct the topology type. */
+function topologyType(topology:any): string {
   if (topology.description) {
     return topology.description.type;
   }
@@ -521,15 +514,10 @@ function topologyType(topology) {
   return TopologyType.Single;
 }
 
-const RETRYABLE_WIRE_VERSION = 6;
-
-/**
- * Determines whether the provided topology supports retryable writes
- *
- * @param {Mongos|Replset} topology
- */
-const isRetryableWritesSupported = function(topology) {
-  const maxWireVersion = topology.lastIsMaster().maxWireVersion;
+/** Determines whether the provided topology supports retryable writes. */
+export function isRetryableWritesSupported(topology: any /*Mongos | ReplSet*/): boolean {
+  const maxWireVersion: number = topology.lastIsMaster().maxWireVersion;
+  
   if (maxWireVersion < RETRYABLE_WIRE_VERSION) {
     return false;
   }
@@ -543,19 +531,19 @@ const isRetryableWritesSupported = function(topology) {
   }
 
   return true;
-};
+}
 
-module.exports.SessionMixins = SessionMixins;
-module.exports.resolveClusterTime = resolveClusterTime;
-module.exports.inquireServerState = inquireServerState;
-module.exports.getTopologyType = getTopologyType;
-module.exports.emitServerDescriptionChanged = emitServerDescriptionChanged;
-module.exports.emitTopologyDescriptionChanged = emitTopologyDescriptionChanged;
-module.exports.cloneOptions = cloneOptions;
-module.exports.createClientInfo = createClientInfo;
-module.exports.createCompressionInfo = createCompressionInfo;
-module.exports.clone = clone;
-module.exports.diff = diff;
-module.exports.Interval = Interval;
-module.exports.Timeout = Timeout;
-module.exports.isRetryableWritesSupported = isRetryableWritesSupported;
+// module.exports.SessionMixins = SessionMixins;
+// module.exports.resolveClusterTime = resolveClusterTime;
+// module.exports.inquireServerState = inquireServerState;
+// module.exports.getTopologyType = getTopologyType;
+// module.exports.emitServerDescriptionChanged = emitServerDescriptionChanged;
+// module.exports.emitTopologyDescriptionChanged = emitTopologyDescriptionChanged;
+// // module.exports.cloneOptions = cloneOptions;
+// module.exports.createClientInfo = createClientInfo;
+// module.exports.createCompressionInfo = createCompressionInfo;
+// module.exports.clone = clone;
+// module.exports.diff = diff;
+// module.exports.Interval = Interval;
+// module.exports.Timeout = Timeout;
+// module.exports.isRetryableWritesSupported = isRetryableWritesSupported;

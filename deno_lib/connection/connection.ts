@@ -1,8 +1,8 @@
 // const EventEmitter = require('events').EventEmitter;
-import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
+// import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
 import { sha1 } from "https://denopkg.com/chiefbiiko/sha1/mod.ts"
 import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
-import { encode, decode } from "https://denopkg.com/chiefbiiko/std-encoding/mod.ts"
+import { /*encode, */decode } from "https://denopkg.com/chiefbiiko/std-encoding/mod.ts"
 // const crypto = require('crypto');
 // const debugOptions = require('./utils').debugOptions;
 import { debugOptions} from "./utils.ts";
