@@ -21,9 +21,10 @@ platform: string;
 // const ReadPreference = require('./read_preference');
 // const Buffer = require('safe-buffer').Buffer;
 // const TopologyType = require('../sdam/topology_description').TopologyType;
+  import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
 import {ReadPreference} from "./read_preference.ts"
 import {TopologyType} from "./../sdam/topology_description.ts"
-  import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
+import {ServerType, ServerDescription} from "./../sdam/server_description.ts"
   import { MONGODB_CORE_VERSION } from "./../meta.ts"
   import {MongoError} from "errors.ts"
 import { Callback,calculateDurationInMS, clone, noop} from "./../utils.ts"
@@ -384,22 +385,22 @@ class Timeout {
 //   };
 // }
 
-function diff(previous, current) {
+function diff(previous: {servers: ServerDescription[], [key:string]:any}= { servers: [] }, current: {servers: ServerDescription[], [key:string]:any}= { servers: [] }): {servers: ServerDescription[]} {
   // Difference document
-  var diff = {
-    servers: []
-  };
+  const diff:  {servers: ServerDescription[]} = {  servers: [] };
 
-  // Previous entry
-  if (!previous) {
-    previous = { servers: [] };
-  }
+  // // Previous entry
+  // if (!previous) {
+  //   previous = { servers: [] };
+  // }
 
+  let i: number = 0;
+  let j: number = 0
+    let found: boolean = false;
+    
   // Check if we have any previous servers missing in the current ones
-  for (var i = 0; i < previous.servers.length; i++) {
-    var found = false;
-
-    for (var j = 0; j < current.servers.length; j++) {
+  for (i= 0; i < previous.servers.length; i++) {
+    for (j = 0; j < current.servers.length; j++) {
       if (current.servers[j].address.toLowerCase() === previous.servers[i].address.toLowerCase()) {
         found = true;
         break;
@@ -411,7 +412,7 @@ function diff(previous, current) {
       diff.servers.push({
         address: previous.servers[i].address,
         from: previous.servers[i].type,
-        to: 'Unknown'
+        to: ServerType.Unknown
       });
     }
   }
@@ -432,7 +433,7 @@ function diff(previous, current) {
     if (!found) {
       diff.servers.push({
         address: current.servers[j].address,
-        from: 'Unknown',
+        from: ServerType.Unknown,
         to: current.servers[j].type
       });
     }
@@ -440,11 +441,11 @@ function diff(previous, current) {
 
   // Got through all the servers
   for (i = 0; i < previous.servers.length; i++) {
-    var prevServer = previous.servers[i];
+    let prevServer: ServerDescription = previous.servers[i];
 
     // Go through all current servers
     for (j = 0; j < current.servers.length; j++) {
-      var currServer = current.servers[j];
+      let currServer: ServerDescription = current.servers[j];
 
       // Matching server
       if (prevServer.address.toLowerCase() === currServer.address.toLowerCase()) {

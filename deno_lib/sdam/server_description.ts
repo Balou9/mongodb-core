@@ -95,7 +95,7 @@ maxWireVersion: number
 maxBsonObjectSize: number
 maxMessageSizeBytes: number
 maxWriteBatchSize: number
-compression: unknown
+compression: {compressors: string[]}
 // me: string
 // hosts: string[]
 // passives: string[]
