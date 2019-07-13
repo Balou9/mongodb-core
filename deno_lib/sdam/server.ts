@@ -95,7 +95,7 @@ export class Server extends EventEmitter {
     sclusterTime?: unknown
   }
   /** Creates a server. */
-  constructor(description: ServerDescription, options: {[key: string]: any}, topology: Topology) {
+  constructor(description: ServerDescription, options: {[key: string]: any}={}, topology: Topology) {
     super();
 
     this.s = {

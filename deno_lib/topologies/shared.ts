@@ -469,7 +469,7 @@ export function diff(previous: {servers: ServerDescription[], [key:string]:any}=
 }
 
 /** Shared function to determine clusterTime for a given topology.  */
-export function resolveClusterTime(topology:{clusterTime?: { clusterTime: number | BSON.LONG }}, $clusterTime: { clusterTime: BSON.LONG}): void {
+export function resolveClusterTime(topology:{clusterTime?: { clusterTime:  BSON.LONG }, [key:string]: any}, $clusterTime: { clusterTime: BSON.LONG, [key:string]: any}): void {
   if (!topology.clusterTime ||
       $clusterTime.clusterTime.greaterThan(topology.clusterTime.clusterTime)) {
     topology.clusterTime = $clusterTime;

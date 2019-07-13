@@ -1,8 +1,9 @@
-'use strict';
+// 'use strict';
 
 // var inherits = require('util').inherits,
   // f = require('util').format,
   // EventEmitter = require('events').EventEmitter,
+  import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
   import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
   // ReadPreference = require('./read_preference'),
   import { ReadPreference} from "./read_preference.ts"
@@ -20,17 +21,28 @@
   import * as wireprotocol from "./../wireprotocol.ts"
   // BasicCursor = require('../cursor'),
   import { BasicCursor} from "./../cursor.ts"
-  sdam = require('./shared'),
-  createClientInfo = require('./shared').createClientInfo,
-  createCompressionInfo = require('./shared').createCompressionInfo,
-  resolveClusterTime = require('./shared').resolveClusterTime,
-  SessionMixins = require('./shared').SessionMixins,
-  relayEvents = require('../utils').relayEvents;
+  // sdam = require('./shared'),
+  // createClientInfo = require('./shared').createClientInfo,
+  // createCompressionInfo = require('./shared').createCompressionInfo,
+  // resolveClusterTime = require('./shared').resolveClusterTime,
+  // SessionMixins = require('./shared').SessionMixins,
+  import {
+    ClientInfo,
+    createClientInfo, 
+    createCompressionInfo,
+    emitServerDescriptionChanged,
+      emitTopologyDescriptionChanged,
+    getTopologyType,
+    resolveClusterTime,
+    SessionMixins
+  } from "./shared.ts"
+  // relayEvents = require('../utils').relayEvents;
+  import { collationNotSupported, relayEvents} from "./../utils.ts"
 
-const collationNotSupported = require('../utils').collationNotSupported;
+// const collationNotSupported = require('../utils').collationNotSupported;
 
 // Used for filtering out fields for loggin
-var debugFields = [
+const debugFields: string[] = [
   'reconnect',
   'reconnectTries',
   'reconnectInterval',
@@ -58,10 +70,10 @@ var debugFields = [
 ];
 
 // Server instance id
-var id = 0;
-var serverAccounting = false;
-var servers = {};
-var BSON = retrieveBSON();
+let id: number = 0;
+let serverAccounting = false;
+let servers: unknown = {};
+// var BSON = retrieveBSON();
 
 /**
  * Creates a new Server instance
@@ -112,109 +124,210 @@ var BSON = retrieveBSON();
  * @property {string} type the topology type.
  * @property {string} parserType the parser type used (c++ or js).
  */
-var Server = function(options) {
-      // !!!!!!!!!!!!!!!!!!!!!!!!!!!! serverDescription?: {[key:string]: any}
-  options = options || {};
+ export class Server extends EventEmitter {
+   
+   /** Enables server accounting. */
+   static enableServerAccounting(): void {
+     serverAccounting = true;
+     servers = {};
+   }
+   
+   /** Disables server accounting. */
+   static disableServerAccounting(): void {serverAccounting = false}
+   
+   /** Gets all servers. */
+   static servers(): unknown {
+     return servers
+   }
+   
+   readonly id: number;
+   
+   readonly s: {
+     options: {[key:string]:any}
+     logger: Logger
+     Cursor: Function
+     pool: Pool
+     disconnectHandler: Function
+     monitoring: boolean
+     inTopology: boolean
+     monitoringInterval: number
+     topologyId: number
+     compression: { compressors: string[]}
+     parent: any,
+     clusterTime?: { clusterTime: BSON.Long}
+   }
+   
+   ismaster: {[key:string]: any}
+   lastIsMasterMS: number
+   monitoringProcessId: number
+   initialConnect: boolean
+   clientInfo: ClientInfo
+   lastUpdateTime: number
+   lastWriteDate: number
+   staleness: number
+   _type: string
+   
+   constructor(options: {[key:string]: any} = {}) {
+     super()
+     
+     this.id = id++;
+     this.s = {
+       options,
+       logger: new Logger("Server", options),
+           // Factory overrides
+       Cursor: options.cursorFactory || BasicCursor,
+       // Pool
+       pool: null,
+       // Disconnect handler
+       disconnectHandler: options.disconnectHandler,
+       // Monitor thread (keeps the connection alive)
+       monitoring: typeof options.monitoring === 'boolean' ? options.monitoring : true,
+       // Is the server in a topology
+       inTopology: !!options.parent,
+       // Monitoring timeout
+       monitoringInterval:
+         typeof options.monitoringInterval === 'number' ? options.monitoringInterval : 5000,
+       // Topology id
+       topologyId: -1,
+       compression: { compressors: createCompressionInfo(options) },
+       // Optional parent topology
+       parent: options.parent
+     }
+     
+     // If this is a single deployment we need to track the clusterTime here
+     if (!this.s.parent) {
+       this.s.clusterTime = null;
+     }
+   
+     // Curent ismaster
+     this.ismaster = null;
+     // Current ping time
+     this.lastIsMasterMS = -1;
+     // The monitoringProcessId
+     this.monitoringProcessId = null;
+     // Initial connection
+     this.initialConnect = true;
+     // Default type
+     this._type = 'server';
+     // Set the client info
+     this.clientInfo = createClientInfo(options);
+   
+     // Max Stalleness values
+     // last time we updated the ismaster state
+     this.lastUpdateTime = 0;
+     // Last write time
+     this.lastWriteDate = 0;
+     // Stalleness
+     this.staleness = 0;
+   }
+   
+ }
+ 
+ 
+// var ServerX = function(options) {
+//       // !!!!!!!!!!!!!!!!!!!!!!!!!!!! serverDescription?: {[key:string]: any}
+//   options = options || {};
+// 
+//   // Add event listener
+//   EventEmitter.call(this);
+// 
+//   // Server instance id
+//   this.id = id++;
+// 
+//   // Internal state
+//   this.s = {
+//     // Options
+//     options: options,
+//     // Logger
+//     logger: Logger('Server', options),
+//     // Factory overrides
+//     Cursor: options.cursorFactory || BasicCursor,
+//     // BSON instance
+//     // bson:
+//     //   options.bson ||
+//     //   new BSON([
+//     //     BSON.Binary,
+//     //     BSON.Code,
+//     //     BSON.DBRef,
+//     //     BSON.Decimal128,
+//     //     BSON.Double,
+//     //     BSON.Int32,
+//     //     BSON.Long,
+//     //     BSON.Map,
+//     //     BSON.MaxKey,
+//     //     BSON.MinKey,
+//     //     BSON.ObjectId,
+//     //     BSON.BSONRegExp,
+//     //     BSON.Symbol,
+//     //     BSON.Timestamp
+//     //   ]),
+//     // Pool
+//     pool: null,
+//     // Disconnect handler
+//     disconnectHandler: options.disconnectHandler,
+//     // Monitor thread (keeps the connection alive)
+//     monitoring: typeof options.monitoring === 'boolean' ? options.monitoring : true,
+//     // Is the server in a topology
+//     inTopology: !!options.parent,
+//     // Monitoring timeout
+//     monitoringInterval:
+//       typeof options.monitoringInterval === 'number' ? options.monitoringInterval : 5000,
+//     // Topology id
+//     topologyId: -1,
+//     compression: { compressors: createCompressionInfo(options) },
+//     // Optional parent topology
+//     parent: options.parent
+//   };
+// 
+//   // If this is a single deployment we need to track the clusterTime here
+//   if (!this.s.parent) {
+//     this.s.clusterTime = null;
+//   }
+// 
+//   // Curent ismaster
+//   this.ismaster = null;
+//   // Current ping time
+//   this.lastIsMasterMS = -1;
+//   // The monitoringProcessId
+//   this.monitoringProcessId = null;
+//   // Initial connection
+//   this.initialConnect = true;
+//   // Default type
+//   this._type = 'server';
+//   // Set the client info
+//   this.clientInfo = createClientInfo(options);
+// 
+//   // Max Stalleness values
+//   // last time we updated the ismaster state
+//   this.lastUpdateTime = 0;
+//   // Last write time
+//   this.lastWriteDate = 0;
+//   // Stalleness
+//   this.staleness = 0;
+// };
 
-  // Add event listener
-  EventEmitter.call(this);
-
-  // Server instance id
-  this.id = id++;
-
-  // Internal state
-  this.s = {
-    // Options
-    options: options,
-    // Logger
-    logger: Logger('Server', options),
-    // Factory overrides
-    Cursor: options.cursorFactory || BasicCursor,
-    // BSON instance
-    bson:
-      options.bson ||
-      new BSON([
-        BSON.Binary,
-        BSON.Code,
-        BSON.DBRef,
-        BSON.Decimal128,
-        BSON.Double,
-        BSON.Int32,
-        BSON.Long,
-        BSON.Map,
-        BSON.MaxKey,
-        BSON.MinKey,
-        BSON.ObjectId,
-        BSON.BSONRegExp,
-        BSON.Symbol,
-        BSON.Timestamp
-      ]),
-    // Pool
-    pool: null,
-    // Disconnect handler
-    disconnectHandler: options.disconnectHandler,
-    // Monitor thread (keeps the connection alive)
-    monitoring: typeof options.monitoring === 'boolean' ? options.monitoring : true,
-    // Is the server in a topology
-    inTopology: !!options.parent,
-    // Monitoring timeout
-    monitoringInterval:
-      typeof options.monitoringInterval === 'number' ? options.monitoringInterval : 5000,
-    // Topology id
-    topologyId: -1,
-    compression: { compressors: createCompressionInfo(options) },
-    // Optional parent topology
-    parent: options.parent
-  };
-
-  // If this is a single deployment we need to track the clusterTime here
-  if (!this.s.parent) {
-    this.s.clusterTime = null;
-  }
-
-  // Curent ismaster
-  this.ismaster = null;
-  // Current ping time
-  this.lastIsMasterMS = -1;
-  // The monitoringProcessId
-  this.monitoringProcessId = null;
-  // Initial connection
-  this.initialConnect = true;
-  // Default type
-  this._type = 'server';
-  // Set the client info
-  this.clientInfo = createClientInfo(options);
-
-  // Max Stalleness values
-  // last time we updated the ismaster state
-  this.lastUpdateTime = 0;
-  // Last write time
-  this.lastWriteDate = 0;
-  // Stalleness
-  this.staleness = 0;
-};
-
-inherits(Server, EventEmitter);
+// inherits(Server, EventEmitter);
 Object.assign(Server.prototype, SessionMixins);
 
 Object.defineProperty(Server.prototype, 'type', {
   enumerable: true,
-  get: function() {
+  get(): string {
     return this._type;
   }
 });
 
 Object.defineProperty(Server.prototype, 'parserType', {
   enumerable: true,
-  get: function() {
-    return BSON.native ? 'c++' : 'js';
+  get(): string {
+    return /*BSON.native ? 'c++' : */'js';
   }
 });
 
 Object.defineProperty(Server.prototype, 'logicalSessionTimeoutMinutes', {
   enumerable: true,
-  get: function() {
-    if (!this.ismaster) return null;
+  get(): number {
+    if (!this.ismaster){ return null;}
+    
     return this.ismaster.logicalSessionTimeoutMinutes || null;
   }
 });
@@ -225,32 +338,34 @@ Object.defineProperty(Server.prototype, 'logicalSessionTimeoutMinutes', {
 // server.
 Object.defineProperty(Server.prototype, 'clusterTime', {
   enumerable: true,
-  set: function(clusterTime) {
-    const settings = this.s.parent ? this.s.parent : this.s;
+  set(clusterTime: { clusterTime: BSON.Long}): void {
+    const settings: {[key:string]: any} = this.s.parent ? this.s.parent : this.s;
+    
     resolveClusterTime(settings, clusterTime);
   },
-  get: function() {
-    const settings = this.s.parent ? this.s.parent : this.s;
+  get(): {clusterTime: BSON.Long} {
+    const settings: {[key:string]: any}  = this.s.parent ? this.s.parent : this.s;
+    
     return settings.clusterTime || null;
   }
 });
 
-Server.enableServerAccounting = function() {
-  serverAccounting = true;
-  servers = {};
-};
+// Server.enableServerAccounting = function() {
+//   serverAccounting = true;
+//   servers = {};
+// };
 
-Server.disableServerAccounting = function() {
-  serverAccounting = false;
-};
+// Server.disableServerAccounting = function() {
+//   serverAccounting = false;
+// };
 
-Server.servers = function() {
-  return servers;
-};
+// Server.servers = function() {
+//   return servers;
+// };
 
 Object.defineProperty(Server.prototype, 'name', {
   enumerable: true,
-  get: function() {
+  get(): string {
     return this.s.options.host + ':' + this.s.options.port;
   }
 });
