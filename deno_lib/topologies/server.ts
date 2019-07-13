@@ -6,8 +6,11 @@
   import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bson.ts";
   import { EventEmitter } from "https://denopkg.com/balou9/EventEmitter/mod.ts"
   // ReadPreference = require('./read_preference'),
+  import { CommandResult} from "./../connection/command_result.ts"
+  import { calculateDurationInMS} from "./../utils.ts"
   import { ReadPreference} from "./read_preference.ts"
   // Logger = require('../connection/logger'),
+  import { Connection} from "./../connection/connection.ts"
   import { Logger } from "./../connection/logger.ts"
   // debugOptions = require('../connection/utils').debugOptions,
   import { debugOptions} from "./../connection/utils.ts"
@@ -72,7 +75,7 @@ const debugFields: string[] = [
 // Server instance id
 let id: number = 0;
 let serverAccounting = false;
-let servers: unknown = {};
+let servers: {[key:number ]: any}= {};
 // var BSON = retrieveBSON();
 
 /**
@@ -147,7 +150,7 @@ let servers: unknown = {};
      logger: Logger
      Cursor: Function
      pool: Pool
-     disconnectHandler: Function
+     disconnectHandler: {[key:string]: any}
      monitoring: boolean
      inTopology: boolean
      monitoringInterval: number
@@ -162,6 +165,7 @@ let servers: unknown = {};
    monitoringProcessId: number
    initialConnect: boolean
    clientInfo: ClientInfo
+   clusterTime: {clusterTime: BSON.LONG}
    lastUpdateTime: number
    lastWriteDate: number
    staleness: number
@@ -220,10 +224,15 @@ let servers: unknown = {};
      // Stalleness
      this.staleness = 0;
    }
+
+   /** Gets the server name. */
+   get name(): string {
+      return `${this.s.options.host}:${this.s.options.port}`;
+   }
    
  }
  
- 
+
 // var ServerX = function(options) {
 //       // !!!!!!!!!!!!!!!!!!!!!!!!!!!! serverDescription?: {[key:string]: any}
 //   options = options || {};
@@ -370,13 +379,13 @@ Object.defineProperty(Server.prototype, 'name', {
   }
 });
 
-function disconnectHandler(self, type, ns, cmd, options, callback) {
+function disconnectHandler(self: Server, type: string, ns:string, cmd: {[key:string]:any}, options: {[key:string]:any}={}, callback:Callback=noop): boolean {
   // Topology is not connected, save the call in the provided store to be
   // Executed at some point when the handler deems it's reconnected
   if (
     !self.s.pool.isConnected() &&
     self.s.options.reconnect &&
-    self.s.disconnectHandler != null &&
+    self.s.disconnectHandler &&
     !options.monitoring
   ) {
     self.s.disconnectHandler.add(type, ns, cmd, options, callback);
@@ -385,20 +394,22 @@ function disconnectHandler(self, type, ns, cmd, options, callback) {
 
   // If we have no connection error
   if (!self.s.pool.isConnected()) {
-    callback(new MongoError(f('no connection available to server %s', self.name)));
+    callback(new MongoError(`no connection available to server ${self.name}`));
     return true;
   }
 }
 
-function monitoringProcess(self) {
-  return function() {
+function monitoringProcess(self: Server): () => void {
+  return (): void => {
     // Pool was destroyed do not continue process
-    if (self.s.pool.isDestroyed()) return;
+    if (self.s.pool.isDestroyed()) {return;}
+    
     // Emit monitoring Process event
     self.emit('monitoring', self);
+    
     // Perform ismaster call
     // Get start time
-    var start = new Date().getTime();
+    const start: number =performance.now()// new Date().getTime();
 
     // Execute the ismaster query
     self.command(
@@ -411,14 +422,19 @@ function monitoringProcess(self) {
             : self.s.options.connectionTimeout,
         monitoring: true
       },
-      (err, result) => {
+      (_?:Error, result?: CommandResult): void => {
         // Set initial lastIsMasterMS
-        self.lastIsMasterMS = new Date().getTime() - start;
-        if (self.s.pool.isDestroyed()) return;
+        // self.lastIsMasterMS = new Date().getTime() - start;
+        
+        self.lastIsMasterMS = calculateDurationInMS(start)
+        
+        if (self.s.pool.isDestroyed()) {return;}
+        
         // Update the ismaster view if we have a result
         if (result) {
           self.ismaster = result.result;
         }
+        
         // Re-schedule the monitoring process
         self.monitoringProcessId = setTimeout(monitoringProcess(self), self.s.monitoringInterval);
       }
@@ -426,31 +442,33 @@ function monitoringProcess(self) {
   };
 }
 
-var eventHandler = function(self, event) {
-  return function(err, conn) {
+function eventHandler(self: Server, eventName):(err?:Error, connection?:Connection) => void {
+  return (err?:Error, connection?: Connection): void => {
     // Log information of received information if in info mode
     if (self.s.logger.isInfo()) {
-      var object = err instanceof MongoError ? JSON.stringify(err) : {};
+      const msg: string =  JSON.stringify(err instanceof MongoError ? err : {}) 
+      
       self.s.logger.info(
-        f('server %s fired event %s out with message %s', self.name, event, object)
+        // f('server %s fired event %s out with message %s', self.name, event, object)
+        `server ${self.name} fired event ${eventName} out with message ${msg}`
       );
     }
 
     // Handle connect event
-    if (event === 'connect') {
+    if (eventName === 'connect') {
       self.initialConnect = false;
-      self.ismaster = conn.ismaster;
-      self.lastIsMasterMS = conn.lastIsMasterMS;
-      if (conn.agreedCompressor) {
-        self.s.pool.options.agreedCompressor = conn.agreedCompressor;
+      self.ismaster = connection.ismaster;
+      self.lastIsMasterMS = connection.lastIsMasterMS;
+      if (connection.agreedCompressor) {
+        self.s.pool.options.agreedCompressor = connection.agreedCompressor;
       }
 
-      if (conn.zlibCompressionLevel) {
-        self.s.pool.options.zlibCompressionLevel = conn.zlibCompressionLevel;
+      if (connection.zlibCompressionLevel) {
+        self.s.pool.options.zlibCompressionLevel = connection.zlibCompressionLevel;
       }
 
-      if (conn.ismaster.$clusterTime) {
-        const $clusterTime = conn.ismaster.$clusterTime;
+      if (connection.ismaster.$clusterTime) {
+        const $clusterTime: {clusterTime: BSON.Long} = connection.ismaster.$clusterTime;
         self.clusterTime = $clusterTime;
       }
 
@@ -466,17 +484,17 @@ var eventHandler = function(self, event) {
       }
 
       // Emit server description changed if something listening
-      sdam.emitServerDescriptionChanged(self, {
+      emitServerDescriptionChanged(self, {
         address: self.name,
         arbiters: [],
         hosts: [],
         passives: [],
-        type: sdam.getTopologyType(self)
+        type: getTopologyType(self)
       });
 
       if (!self.s.inTopology) {
         // Emit topology description changed if something listening
-        sdam.emitTopologyDescriptionChanged(self, {
+        emitTopologyDescriptionChanged(self, {
           topologyType: 'Single',
           servers: [
             {
@@ -484,7 +502,7 @@ var eventHandler = function(self, event) {
               arbiters: [],
               hosts: [],
               passives: [],
-              type: sdam.getTopologyType(self)
+              type: getTopologyType(self)
             }
           ]
         });
@@ -493,25 +511,31 @@ var eventHandler = function(self, event) {
       // Log the ismaster if available
       if (self.s.logger.isInfo()) {
         self.s.logger.info(
-          f('server %s connected with ismaster [%s]', self.name, JSON.stringify(self.ismaster))
+          // f('server %s connected with ismaster [%s]', self.name, JSON.stringify(self.ismaster))
+          `server ${self.name} connected with ismaster [${JSON.stringify(self.ismaster)}]`
         );
       }
 
       // Emit connect
       self.emit('connect', self);
     } else if (
-      event === 'error' ||
-      event === 'parseError' ||
-      event === 'close' ||
-      event === 'timeout' ||
-      event === 'reconnect' ||
-      event === 'attemptReconnect' ||
-      'reconnectFailed'
+      // ["error", "parseError", "close", "timeout", "reconnect", "attemptReconnect", "reconnectFailed"].includes(eventName)
+      eventName === 'error' ||
+      eventName === 'parseError' ||
+      eventName === 'close' ||
+      eventName === 'timeout' ||
+      eventName === 'reconnect' ||
+      eventName === 'attemptReconnect' ||
+      eventName === 'reconnectFailed'
     ) {
       // Remove server instance from accounting
       if (
         serverAccounting &&
-        ['close', 'timeout', 'error', 'parseError', 'reconnectFailed'].indexOf(event) !== -1
+        // ['close', 'timeout', 'error', 'parseError', 'reconnectFailed'].includes(eventName)
+        (eventName === "close" ||
+      eventName === "timeout" ||
+    eventName === "error" ||
+  eventName === "pareError" ||eventName === "reconnectFailed")
       ) {
         // Emit toplogy opening event if not in topology
         if (!self.s.inTopology) {
@@ -521,9 +545,9 @@ var eventHandler = function(self, event) {
         delete servers[self.id];
       }
 
-      if (event === 'close') {
+      if (eventName === 'close') {
         // Closing emits a server description changed event going to unknown.
-        sdam.emitServerDescriptionChanged(self, {
+        emitServerDescriptionChanged(self, {
           address: self.name,
           arbiters: [],
           hosts: [],
@@ -533,10 +557,10 @@ var eventHandler = function(self, event) {
       }
 
       // Reconnect failed return error
-      if (event === 'reconnectFailed') {
+      if (eventName === 'reconnectFailed') {
         self.emit('reconnectFailed', err);
         // Emit error if any listeners
-        if (self.listeners('error').length > 0) {
+        if (self.listeners('error').length) {
           self.emit('error', err);
         }
         // Terminate
@@ -545,29 +569,32 @@ var eventHandler = function(self, event) {
 
       // On first connect fail
       if (
-        ['disconnected', 'connecting'].indexOf(self.s.pool.state) !== -1 &&
+        // ['disconnected', 'connecting'].indexOf(self.s.pool.state) !== -1 &&
+        (self.s.pool.state === "disconnected" ||self.s.pool.state === "connecting") &&
         self.initialConnect &&
-        ['close', 'timeout', 'error', 'parseError'].indexOf(event) !== -1
+        // ['close', 'timeout', 'error', 'parseError'].indexOf(event) !== -1
+        (eventName === "close" ||eventName === "timeout" ||eventName === "error" ||eventName === "parseError")
       ) {
         self.initialConnect = false;
         return self.emit(
           'error',
           new MongoNetworkError(
-            f('failed to connect to server [%s] on first connect [%s]', self.name, err)
+            // f('failed to connect to server [%s] on first connect [%s]', self.name, err)
+            `failed to connect to server ${self.name} on first connect [${err && err.stack}]`
           )
         );
       }
 
       // Reconnect event, emit the server
-      if (event === 'reconnect') {
+      if (eventName === 'reconnect') {
         // Reconnecting emits a server description changed event going from unknown to the
         // current server type.
-        sdam.emitServerDescriptionChanged(self, {
+        emitServerDescriptionChanged(self, {
           address: self.name,
           arbiters: [],
           hosts: [],
           passives: [],
-          type: sdam.getTopologyType(self)
+          type: getTopologyType(self)
         });
         return self.emit(event, self);
       }
@@ -577,6 +604,8 @@ var eventHandler = function(self, event) {
     }
   };
 };
+
+////////////////////////// TODO ///////////////////////////////////////////////
 
 /**
  * Initiate server connect

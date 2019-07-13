@@ -183,10 +183,10 @@ function changedIsMaster(self: any, currentIsmaster?: {[key:string]: any}, ismas
   // return false;
 }
 
-export function getTopologyType(self: any, ismaster?: {[key:string]: any}): string {
-  if (!ismaster) {
-    ismaster = self.ismaster;
-  }
+export function getTopologyType(self: any, ismaster: {[key:string]: any} = self.ismaster): string {
+  // if (!ismaster) {
+  //   ismaster = self.ismaster;
+  // }
 
   if (!ismaster) {return 'Unknown';}
   
