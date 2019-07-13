@@ -83,6 +83,11 @@ export function uuidv4(): Uint8Array {
   return r;
 }
 
+/** Naively clones any js objects. */
+export function clone(object: any): any {
+  return JSON.parse(JSON.stringify(object));
+}
+
 // /**
 //  * Generate a UUIDv4
 //  */
@@ -94,7 +99,7 @@ export function uuidv4(): Uint8Array {
 // };
 
 /** Calculates a ms duration from a simple timestamp (performance.now). */
-export function calculateDurationInMs(started: number): number {
+export function calculateDurationInMS(started: number): number {
   return performance.now() - started;
 }
 
@@ -104,7 +109,7 @@ export function calculateDurationInMs(started: number): number {
 //  * @param {Object} started A high resolution timestamp created from `process.hrtime()`
 //  * @returns {Number} The duration in milliseconds
 //  */
-// const calculateDurationInMs = started => {
+// const calculateDurationInMS = started => {
 //   const hrtime = process.hrtime(started);
 //   return (hrtime[0] * 1e9 + hrtime[1]) / 1e6;
 // };
@@ -198,7 +203,7 @@ export function collationNotSupported(server: any, cmd: {[key: string]: any}): b
 
 // module.exports = {
 //   uuidV4,
-//   calculateDurationInMs,
+//   calculateDurationInMS,
 //   relayEvents,
 //   collationNotSupported,
 //   retrieveEJSON,

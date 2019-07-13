@@ -4,8 +4,8 @@
 import { CommandResult} from "./../connection/command_result.ts"
 import {ServerDescription} from "./server_description.ts"
 import {TopologyDescription} from "./topology_description.ts"
-// const calculateDurationInMs = require('../utils').calculateDurationInMs;
-import { Callback, calculateDurationInMs} from "./../utils.ts"
+// const calculateDurationInMS = require('../utils').calculateDurationInMS;
+import { Callback, calculateDurationInMS} from "./../utils.ts"
 
 /**
  * Published when server description changes.
@@ -159,7 +159,7 @@ export function monitorServer(server: unknown, options: {[key:string]: any} = {}
         socketTimeout: server.s.options.connectionTimeout || 2000
       },
       (err: Error, result: CommandResult): void => {
-      const duration: number = calculateDurationInMs(start);
+      const duration: number = calculateDurationInMS(start);
 
         if (err) {
           server.emit(

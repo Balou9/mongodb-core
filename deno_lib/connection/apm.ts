@@ -3,9 +3,9 @@
 // const KillCursor = require('../connection/commands').KillCursor;
 // const GetMore = require('../connection/commands').GetMore;
 import { Msg, KillCursor, GetMore } from "./../connection/commands.ts";
-// const calculateDurationInMs = require('../utils').calculateDurationInMs;
+// const calculateDurationInMS = require('../utils').calculateDurationInMS;
 import { MongoError } from "./../errors.ts";
-import { calculateDurationInMs } from "./../utils.ts"
+import { calculateDurationInMS } from "./../utils.ts"
 
 /** Commands that we want to redact because of the sensitive nature of their contents */
 const SENSITIVE_COMMANDS: Set<string> = new Set([
@@ -227,14 +227,14 @@ export class CommandSucceededEvent {
     this.commandName = extractCommandName(cmd);
 
     // Object.assign(this, {
-    //   duration: calculateDurationInMs(started),
+    //   duration: calculateDurationInMS(started),
     //   commandName,
     //   reply: maybeRedact(commandName, extractReply(command, reply)),
     //   requestId: command.requestId,
     //   connectionId: generateConnectionId(pool)
     // });
 
-    this.duration = calculateDurationInMs(started)
+    this.duration = calculateDurationInMS(started)
     this.reply = maybeRedact(this.commandName, extractReply(command, reply))
     this.requestId = command.requestId
     this.connectionId = generateConnectionId(pool)
@@ -261,14 +261,14 @@ export class CommandFailedEvent {
     // const commandName = extractCommandName(cmd);
 
     // Object.assign(this, {
-    //   duration: calculateDurationInMs(started),
+    //   duration: calculateDurationInMS(started),
     //   commandName,
     //   failure: maybeRedact(commandName, error),
     //   requestId: command.requestId,
     //   connectionId: generateConnectionId(pool)
     // });
     this.commandName = extractCommandName(extractCommand(command));
-    this.duration = calculateDurationInMs(started)
+    this.duration = calculateDurationInMS(started)
     this.failure = maybeRedact(this.commandName, error)
     this.requestId = command.requestId
     this.connectionId = generateConnectionId(pool)

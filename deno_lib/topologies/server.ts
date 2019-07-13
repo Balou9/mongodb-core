@@ -113,6 +113,7 @@ var BSON = retrieveBSON();
  * @property {string} parserType the parser type used (c++ or js).
  */
 var Server = function(options) {
+      // !!!!!!!!!!!!!!!!!!!!!!!!!!!! serverDescription?: {[key:string]: any}
   options = options || {};
 
   // Add event listener

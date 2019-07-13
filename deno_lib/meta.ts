@@ -1,0 +1,1 @@
+export const MONGODB_CORE_VERSION: number = 0

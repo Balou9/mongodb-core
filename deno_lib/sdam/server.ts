@@ -90,6 +90,7 @@ export class Server extends EventEmitter {
     monitorId?: number,
     clusterTime?: unknown,
     lastIsMasterMs?: number,
+    serverDescription?: {[key:string]: any}
         // TODO: check if we actually ned this prop !!!
     sclusterTime?: unknown
   }

@@ -10,8 +10,8 @@ import { TopologyType, TopologyDescription } from "./topology_description.ts"
 // const TopologyType = require('./topology_description').TopologyType;
 // const monitoring = require('./monitoring');
 import * as monitoring from "./monitoring.ts"
-// const calculateDurationInMs = require('../utils').calculateDurationInMs;
-import { Callback, calculateDurationInMs, noop, relayEvents } from "./../utils.ts"
+// const calculateDurationInMS = require('../utils').calculateDurationInMS;
+import { Callback, calculateDurationInMS, noop, relayEvents } from "./../utils.ts"
 // const MongoTimeoutError = require('../error').MongoTimeoutError;
 import { MongoError, MongoParseError, MongoTimeoutError, isRetryableError} from "./../errors.ts"
 // const Server = require('./server');
@@ -134,6 +134,7 @@ export class Topology extends EventEmitter {
     clusterTime: unknown
     clientInfo: unknown
     connected: boolean
+        serverDescription?: {[key:string]: any}
   }
   // /**
   //  * Create a topology
@@ -173,7 +174,8 @@ export class Topology extends EventEmitter {
     const serverDescriptions:Map<string, ServerDescription> = seedlist.reduce((result:Map<string, ServerDescription>, seed: ServerDescription):Map<string, ServerDescription> => {
       if (seed.domain_socket) {seed.host = seed.domain_socket;}
 
-      const address: string = seed.port ? `${seed.host}:${seed.port}` : `${seed.host}:27017`;
+      // const address: string = seed.port ? `${seed.host}:${seed.port}` : `${seed.host}:27017`;
+      const address: string = `${seed.host}:${seed.port || 27017}`
 
       result.set(address, new ServerDescription(address));
 
@@ -815,7 +817,7 @@ function randomSelection(arr: any[]): any {
  * @param {function} callback The callback used to convey errors or the resultant servers
  */
 function selectServers(topology: Topology, selector: any, timeout: number, start: number, callback: Callback= noop): void {
-  const duration: number = calculateDurationInMs(start);
+  const duration: number = calculateDurationInMS(start);
 
   if (duration >= timeout) {
     return callback(new MongoTimeoutError(`Server selection timed out after ${timeout} ms`));
