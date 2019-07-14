@@ -1015,10 +1015,11 @@ callback(null, null)
 
   /** Unrefs the pool. */
   unref(): void {
+    this.logger.warn("Pool.prototype.unref is a noop method")
     // Get all the known connections
-    const connections: Connection[] = this.availableConnections.concat(this.inUseConnections);
-
-    connections.forEach((connection: Connection): void => connection.unref());
+    // const connections: Connection[] = this.availableConnections.concat(this.inUseConnections);
+    // 
+    // connections.forEach((connection: Connection): void => connection.unref());
   };
 
 
