@@ -6,6 +6,11 @@ import  { Query } from "./../connection/commands.ts"
 // const Msg = require('../connection/msg').Msg;
 import { Msg, BinMsg} from "./../connection/msg.ts"
 import { MongoError } from "./../errors.ts"
+import {Server} from "./../topologies/server.ts"
+import {Topology} from "./../sdam/topology.ts"
+import {ServerDescription } from "./../sdam/server_description.ts"
+import {TopologyDescription } from "./../sdam/topology_description.ts"
+import { ReadPreference } from "./../topologies/read_preference.ts"
 import {Callback, noop} from "./../utils.ts"
 // const MongoError = require('../error').MongoError;
 // const getReadPreference = require('./shared').getReadPreference;
@@ -19,7 +24,7 @@ import { applySession} from "./../sessions.ts"
 
 // function noop(): void {}
 
-export function command(server: unknown, ns: string, cmd: {[key:string]: any}, options:any = {}, callback: Callback= noop): void {
+export function command(server: Server, ns: string, cmd: {[key:string]: any}, options:any = {}, callback: Callback= noop): void {
     // if (typeof options === 'function') (callback = options), (options = {});
     // options = options || {};
     if (typeof options === "function") {
@@ -117,19 +122,19 @@ export function command(server: unknown, ns: string, cmd: {[key:string]: any}, o
   }
 
 /** Does a topology have session support? */
-function hasSessionSupport(topology: unknown): boolean {
-  if (!topology) {return false;}
+function hasSessionSupport(server: Server): boolean {
+  if (!server) {return false;}
 
-  if (topology.description) {
-    return topology.description.maxWireVersion >= 6;
+  if (server.description) {
+    return server.description.maxWireVersion >= 6;
   }
 
-  return topology.ismaster == null ? false : topology.ismaster.maxWireVersion >= 6;
+  return server.ismaster == null ? false : server.ismaster.maxWireVersion >= 6;
 }
 
 /** Whether a topology or server supports op messages. */
-function supportsOpMsg(topologyOrServer: unknown): boolean {
-  const description: unknown = topologyOrServer.ismaster
+function supportsOpMsg(topologyOrServer: Server | Topology): boolean {
+  const description: ServerDescription | TopologyDescription = topologyOrServer.ismaster
     ? topologyOrServer.ismaster
     : topologyOrServer.description;
 

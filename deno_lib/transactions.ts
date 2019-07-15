@@ -1,6 +1,6 @@
 // 'use strict';
 // const MongoError = require('./error').MongoError;
-// 
+//
 // let TxnState;
 // let stateMachine;
 
@@ -54,7 +54,7 @@ const   stateMachine: { [key: string]: string[]} = {
 
 
 /**
- * The MongoDB ReadConcern, which allows for control of the consistency and 
+ * The MongoDB ReadConcern, which allows for control of the consistency and
  * isolation properties of the data read from replica sets and shards.
  * level values: 'local'|'available'|'majority'|'linearizable'|'snapshot'.
  * See https://docs.mongodb.com/manual/reference/read-concern/
@@ -74,7 +74,7 @@ const   stateMachine: { [key: string]: string[]} = {
  * See https://docs.mongodb.com/manual/reference/write-concern/
  */
 export interface WriteConcern {
-  w?: number;
+  w?: number | string;
   j?: boolean;
   wtimeout?: number;
 }
@@ -93,10 +93,10 @@ export interface TransactionOptions {
 export class Transaction {
   state: string;
   options: TransactionOptions;
-  
+
   private _pinnedServer: unknown;
   private _recoveryToken: unknown;
-  
+
   /** Creates a transaction. */
   constructor(options: TransactionOptions = { readConcern: { level: "local" }, writeConcern: { w: 1, j: false, wtimeout: 0 } }) {
     options = options || {};
@@ -113,7 +113,7 @@ export class Transaction {
     }
 
     if (options.readConcern) {this.options.readConcern = { level: "local", ...options.readConcern};}
-    
+
     if (options.readPreference) {this.options.readPreference = {...options.readPreference};}
 
     // // TODO: This isn't technically necessary
@@ -148,7 +148,7 @@ export class Transaction {
   unpinServer(): void {
     this._pinnedServer = undefined;
   }
-  
+
   /** Gets the pinned server. */
   get server(): unknown {
     return this._pinnedServer;

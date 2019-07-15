@@ -73,6 +73,21 @@ export function concat(bufs: Uint8Array[]): Uint8Array {
   return buf;
 }
 
+/** Equality check for two buffers. */
+export function equal(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) {
+    return false
+  }
+
+  for (let i: number = a.byteLength; i !== -1; --i) {
+    if (a[i] !== b[i]) {
+      return false
+    }
+  }
+
+  return true
+}
+
 /** Gernerates a UUID v4. */
 export function uuidv4(): Uint8Array {
   const r: Uint8Array = crypto.getRandomValues(new Uint8Array(16));

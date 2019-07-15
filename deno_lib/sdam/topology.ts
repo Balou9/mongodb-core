@@ -87,10 +87,10 @@ export interface TopologyOptions {
   minHeartbeatFrequencyMS?:number;
   replicaSet?: unknown
   minHeartbeatIntervalMS?: number
-  cursorFactory?: unknown
-  credentials?: unknown
+  // cursorFactory?: unknown
+  credentials?: MongoCredentials
   compression?: {
-    compressors?: unknown
+    compressors?: string[]
   };
 }
 
@@ -109,7 +109,7 @@ export interface TopologyOptions {
  */
 export class Topology extends EventEmitter {
   readonly logger: Logger
-  
+
   readonly s: {
     // the id of this topology
     id: number;
@@ -123,7 +123,7 @@ export class Topology extends EventEmitter {
     heartbeatFrequencyMS: number
     minHeartbeatIntervalMS: number
     // allow users to override the cursor factory
-    Cursor: Cursor,
+    // Cursor: Cursor,
     // the bson parser
     // bson: options.bson || new BSON(),
     // a map of server instances to normalized addresses
@@ -209,7 +209,7 @@ export class Topology extends EventEmitter {
       heartbeatFrequencyMS: options.heartbeatFrequencyMS,
       minHeartbeatIntervalMS: options.minHeartbeatIntervalMS,
       // allow users to override the cursor factory
-      Cursor: options.cursorFactory || Cursor,
+      // Cursor: /*options.cursorFactory || */Cursor,
       // the bson parser
       // bson: options.bson || new BSON(),
       // a map of server instances to normalized addresses
@@ -689,13 +689,13 @@ export class Topology extends EventEmitter {
    * @param {object} [options.topology] The internal topology of the created cursor
    * @returns {Cursor}
    */
-  cursor(ns: string, cmd:{[key:string]:any}, options:{[key:string]:any}): CursorClass {
-    options = options || {};
+  cursor(ns: string, cmd:{[key:string]:any}, options:{[key:string]:any}={}): Cursor {
+    // options = options || {};
     const topology = options.topology || this;
-    const CursorClass = options.cursorFactory || this.s.Cursor;
+    // const CursorClass = options.cursorFactory || this.s.Cursor;
     translateReadPreference(options);
 
-    return new CursorClass(/*this.s.bson, */ns, cmd, options, topology, this.s.options);
+    return new Cursor(/*this.s.bson, */ns, cmd, options, topology, this.s.options);
   }
 
   get clientInfo(): ClientInfo {
@@ -708,7 +708,7 @@ export class Topology extends EventEmitter {
     this.logger.warn("Topology.prototype.isConnected always returns true")
     return true;
   }
-  
+
   /** Fake compat method. */
   isDestroyed() {
     // console.log('not implemented: `isDestroyed`');

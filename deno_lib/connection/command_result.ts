@@ -1,12 +1,13 @@
 // 'use strict';
+import { Connection } from "./connection.ts"
 
 export class CommandResult {
   readonly result: {[key:string]: any};
-  readonly connection: unknown;
-  readonly message: unknown;
+  readonly connection: Connection;
+  readonly message: {[key:string]: any};
 
   /** Creates a new command result. */
-  constructor(result: {[key:string]: any}, connection: unknown, message: unknown) {
+  constructor(result: {[key:string]: any}, connection: Connection, message: {[key:string]: any}) {
     this.result = result;
     this.connection = connection;
     this.message = message;
