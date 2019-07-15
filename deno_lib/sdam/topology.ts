@@ -28,6 +28,7 @@ import { createClientInfo,createCompressionInfo, isRetryableWritesSupported,reso
 import { Pool } from "./../connection/pool.ts"
 import { Connection } from "./../connection/connection.ts"
 import { CommandResult } from "./../connection/command_result.ts"
+import { Logger} from "./../connection/logger.ts"
 import { Cursor } from "./../cursor.ts"
 // const deprecate = require('util').deprecate;
 // const BSON = require('../connection/utils').retrieveBSON();
@@ -36,6 +37,7 @@ import { Cursor } from "./../cursor.ts"
 // const MongoParseError = require('../error').MongoParseError;
 // const ClientSession = require('../sessions').ClientSession;
 import {ClientSession} from "./../sessions.ts"
+import { ClientInfo} from "./../topologies/shared.ts"
 // const createClientInfo = require('../topologies/shared').createClientInfo;
 // const MongoError = require('../error').MongoError;
 // const resolveClusterTime = require('../topologies/shared').resolveClusterTime;
@@ -106,6 +108,8 @@ export interface TopologyOptions {
  * @fires Topology#serverHeartbeatFailed
  */
 export class Topology extends EventEmitter {
+  readonly logger: Logger
+  
   readonly s: {
     // the id of this topology
     id: number;
@@ -148,6 +152,8 @@ export class Topology extends EventEmitter {
 
   constructor(seedlist: any = [], options: TopologyOptions = {}) {
     super();
+
+   this.logger = new Logger("Topology")
 
     // if (typeof options === 'undefined' && typeof seedlist !== 'string') {
     if (seedlist.constructor === Object) {
@@ -692,20 +698,23 @@ export class Topology extends EventEmitter {
     return new CursorClass(/*this.s.bson, */ns, cmd, options, topology, this.s.options);
   }
 
-  get clientInfo(): unknown {
+  get clientInfo(): ClientInfo {
     return this.s.clientInfo;
   }
 
-  // // Legacy methods for compat with old topology types
-  // isConnected(): boolean {
-  //   // console.log('not implemented: `isConnected`');
-  //   return true;
-  // }
-  //
-  // isDestroyed() {
-  //   // console.log('not implemented: `isDestroyed`');
-  //   return false;
-  // }
+  /** Legacy methods for compat with old topology types. */
+  isConnected(): boolean {
+    // console.log('not implemented: `isConnected`');
+    this.logger.warn("Topology.prototype.isConnected always returns true")
+    return true;
+  }
+  
+  /** Fake compat method. */
+  isDestroyed() {
+    // console.log('not implemented: `isDestroyed`');
+      this.logger.warn("Topology.prototype.isDestroyed always returns false")
+    return false;
+  }
 
   // unref() {
   //   console.log('not implemented: `unref`');

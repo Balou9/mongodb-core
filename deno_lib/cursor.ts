@@ -4,6 +4,7 @@ import * as BSON from "https://denopkg.com/chiefbiiko/bson@deno_port/deno_lib/bs
 // const Logger = require('./connection/logger');
 import { Logger} from "./connection/logger.ts"
 import {Pool} from "./connection/pool.ts"
+import { Connection} from "./connection/connection.ts"
 // const retrieveBSON = require('./connection/utils').retrieveBSON;
 // const MongoError = require('./error').MongoError;
 // const MongoNetworkError = require('./error').MongoNetworkError;
@@ -11,117 +12,117 @@ import {Pool} from "./connection/pool.ts"
 import { MongoError, MongoNetworkError, mongoErrorContextSymbol} from "./errors.ts"
 // const f = require('util').format;
 // const collationNotSupported = require('./utils').collationNotSupported;
-import {collationNotSupported} from "./utils.ts"
+import {Callback, collationNotSupported, noop} from "./utils.ts"
 // const wireProtocol = require('./wireprotocol');
 import * as wireprotocol from "./wireprotocol.ts"
 // const BSON = retrieveBSON();
 // const Long = BSON.Long;
 
-//
-// Handle callback (including any exceptions thrown)
-var handleCallback = function(callback, err, result) {
+/** Handle callback (including any exceptions thrown). */
+function handleCallback(callback: Callback=noop, err?:Error, result?:any):void {
   try {
     callback(err, result);
   } catch (err) {
-    process.nextTick(function() {
-      throw err;
-    });
+    setTimeout(():void => { throw err }, 0)
+    // process.nextTick(function() {
+    //   throw err;
+    // });
   }
 };
 
-/**
- * Validate if the pool is dead and return error
- */
-var isConnectionDead = function(self, callback) {
+/** Validate if the pool is dead and return error. */
+function isConnectionDead(self: Cursor, callback: Callback=noop):boolean {
   if (self.pool && self.pool.isDestroyed()) {
     self.cursorState.killed = true;
-    const err = new MongoNetworkError(
-      f('connection to host %s:%s was destroyed', self.pool.host, self.pool.port)
+    
+    const err: MongoNetworkError = new MongoNetworkError(
+      // f('connection to host %s:%s was destroyed', self.pool.host, self.pool.port)
+      `connection to host ${self.pool.host}:${self.pool.port} was destroyed`
     );
+    
     _setCursorNotifiedImpl(self, () => callback(err));
+    
     return true;
   }
 
   return false;
 };
 
-/**
- * Validate if the cursor is dead but was not explicitly killed by user
- */
-var isCursorDeadButNotkilled = function(self, callback) {
+/** Validate if the cursor is dead but was not explicitly killed by user. */
+function isCursorDeadButNotkilled(self:Cursor, callback:Callback=noop): boolean {
   // Cursor is dead but not marked killed, return null
   if (self.cursorState.dead && !self.cursorState.killed) {
     self.cursorState.killed = true;
+    
     setCursorNotified(self, callback);
+  
     return true;
   }
 
   return false;
 };
 
-/**
- * Validate if the cursor is dead and was killed by user
- */
-var isCursorDeadAndKilled = function(self, callback) {
+/** Validate if the cursor is dead and was killed by user. */
+function isCursorDeadAndKilled(self:Cursor, callback:Callback=noop): boolean {
   if (self.cursorState.dead && self.cursorState.killed) {
     handleCallback(callback, new MongoError('cursor is dead'));
+    
     return true;
   }
 
   return false;
 };
 
-/**
- * Validate if the cursor was killed by the user
- */
-var isCursorKilled = function(self, callback) {
+/** Validate if the cursor was killed by the user. */
+function isCursorKilled (self: Cursor, callback:Callback=noop): boolean {
   if (self.cursorState.killed) {
     setCursorNotified(self, callback);
+    
     return true;
   }
 
   return false;
 };
 
-/**
- * Mark cursor as being dead and notified
- */
-var setCursorDeadAndNotified = function(self, callback) {
+/** Mark cursor as being dead and notified. */
+function setCursorDeadAndNotified (self: Cursor, callback: Callback): void {
   self.cursorState.dead = true;
   setCursorNotified(self, callback);
 };
 
-/**
- * Mark cursor as being notified
- */
-var setCursorNotified = function(self, callback) {
-  _setCursorNotifiedImpl(self, () => handleCallback(callback, null, null));
+/** Mark cursor as being notified. */
+function setCursorNotified (self: Cursor, callback: Callback=noop): void {
+  _setCursorNotifiedImpl(self, (): void => handleCallback(callback, null, null));
 };
 
-var _setCursorNotifiedImpl = function(self, callback) {
+/** Some impl. */
+function _setCursorNotifiedImpl (self: Cursor, callback: Callback): void {
   self.cursorState.notified = true;
   self.cursorState.documents = [];
   self.cursorState.cursorIndex = 0;
+  
   if (self._endSession) {
-    return self._endSession(undefined, () => callback());
+    return self._endSession(undefined, callback);
   }
+  
   return callback();
 };
 
-var nextFunction = function(self, callback) {
+/** Call some next function. */
+function nextFunction (self: Cursor, callback: Callback =noop): void {
   // We have notified about it
   if (self.cursorState.notified) {
     return callback(new Error('cursor is exhausted'));
   }
 
   // Cursor is killed return null
-  if (isCursorKilled(self, callback)) return;
+  if (isCursorKilled(self, callback)) {return;}
 
   // Cursor is dead but not marked killed, return null
-  if (isCursorDeadButNotkilled(self, callback)) return;
+  if (isCursorDeadButNotkilled(self, callback)){ return;}
 
   // We have a dead and killed cursor, attempting to call next should error
-  if (isCursorDeadAndKilled(self, callback)) return;
+  if (isCursorDeadAndKilled(self, callback)) {return;}
 
   // We have just started the cursor
   if (!self.cursorState.init) {
@@ -135,24 +136,25 @@ var nextFunction = function(self, callback) {
     return setCursorDeadAndNotified(self, callback);
   } else if (
     self.cursorState.cursorIndex === self.cursorState.documents.length &&
-    !Long.ZERO.equals(self.cursorState.cursorId)
+    !BSON.Long.ZERO.equals(self.cursorState.cursorId)
   ) {
     // Ensure an empty cursor state
     self.cursorState.documents = [];
     self.cursorState.cursorIndex = 0;
 
     // Check if topology is destroyed
-    if (self.topology.isDestroyed())
+    if (self.topology.isDestroyed()) {
       return callback(
         new MongoNetworkError('connection destroyed, not possible to instantiate cursor')
       );
+    }
 
     // Check if connection is dead and return if not possible to
     // execute a getmore on this connection
-    if (isConnectionDead(self, callback)) return;
+    if (isConnectionDead(self, callback)) {return;}
 
     // Execute the next get more
-    self._getmore(function(err, doc, connection) {
+    self._getmore(function(err?: Error, doc?: {[key:string]:any}, connection?:Connection): void {
       if (err) {
         if (err instanceof MongoError) {
           err[mongoErrorContextSymbol].isGetMore = true;
@@ -174,7 +176,7 @@ var nextFunction = function(self, callback) {
       if (
         self.cursorState.documents.length === 0 &&
         self.cmd.tailable &&
-        Long.ZERO.equals(self.cursorState.cursorId)
+        BSON.Long.ZERO.equals(self.cursorState.cursorId)
       ) {
         // No more documents in the tailed cursor
         return handleCallback(
@@ -188,7 +190,7 @@ var nextFunction = function(self, callback) {
       } else if (
         self.cursorState.documents.length === 0 &&
         self.cmd.tailable &&
-        !Long.ZERO.equals(self.cursorState.cursorId)
+        !BSON.Long.ZERO.equals(self.cursorState.cursorId)
       ) {
         return nextFunction(self, callback);
       }
@@ -202,7 +204,7 @@ var nextFunction = function(self, callback) {
   } else if (
     self.cursorState.documents.length === self.cursorState.cursorIndex &&
     self.cmd.tailable &&
-    Long.ZERO.equals(self.cursorState.cursorId)
+    BSON.Long.ZERO.equals(self.cursorState.cursorId)
   ) {
     return handleCallback(
       callback,
@@ -214,7 +216,7 @@ var nextFunction = function(self, callback) {
     );
   } else if (
     self.cursorState.documents.length === self.cursorState.cursorIndex &&
-    Long.ZERO.equals(self.cursorState.cursorId)
+    BSON.Long.ZERO.equals(self.cursorState.cursorId)
   ) {
     setCursorDeadAndNotified(self, callback);
   } else {
@@ -229,7 +231,7 @@ var nextFunction = function(self, callback) {
     self.cursorState.currentLimit += 1;
 
     // Get the document
-    var doc = self.cursorState.documents[self.cursorState.cursorIndex++];
+    let doc: {[key:string]:any} = self.cursorState.documents[self.cursorState.cursorIndex++];
 
     // Doc overflow
     if (!doc || doc.$err) {
@@ -500,6 +502,8 @@ function initializeCursor(cursor, callback) {
    options: {[key:string]:any}
    logger: Logger
    topology: unknown
+   connection: Connection
+   _endSession: Function
    
    cursorState: {
      cursorId: BSON.Long
@@ -515,7 +519,7 @@ function initializeCursor(cursor, callback) {
      skip: number
      batchSize: number
      currentLimit: number
-     transforms: unknown
+     transforms: {[key:string]: Function}
      raw: boolean
      session:Session
      promoteValues: boolean

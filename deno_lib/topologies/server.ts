@@ -399,7 +399,7 @@ let servers: {[key:number ]: any}= {};
      logger: Logger
      Cursor: Function
      pool: Pool
-     disconnectHandler: {[key:string]: any}
+     disconnectHandler: Function
      monitoring: boolean
      inTopology: boolean
      monitoringInterval: number
