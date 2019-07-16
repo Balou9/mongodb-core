@@ -19,7 +19,7 @@ import {Topology} from "./sdam/topology.ts"
 // const TxnState = require('./transactions').TxnState;
 // const isPromiseLike = require('./utils').isPromiseLike;
 // const ReadPreference = require('./topologies/read_preference');
-import {ReadPreference} from ".topologies/read_preference.ts"
+import {ReadPreference} from "./topologies/read_preference.ts"
 // const isTransactionCommand = require('./transactions').isTransactionCommand;
 // import {isTransactionCommand} from "./transactions.ts"
 // const resolveClusterTime = require('./topologies/shared').resolveClusterTime;

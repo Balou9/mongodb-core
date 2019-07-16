@@ -7,7 +7,7 @@ import { /*encode, */decode } from "https://denopkg.com/chiefbiiko/std-encoding/
 // const debugOptions = require('./utils').debugOptions;
 import { debugOptions} from "./utils.ts";
 // const parseMsgHeader = require('../wireprotocol/shared').parseMsgHeader;
-import { MsgHeader, parseMsgHeader } from "./wireprotocol/shared.ts"
+import { MsgHeader, parseMsgHeader } from "./../wireprotocol/shared.ts"
 // const decompress = require('../wireprotocol/compression').decompress;
 import { decompress } from "./../wireprotocol/compression.ts";
 // const Response = require('./commands').Response;

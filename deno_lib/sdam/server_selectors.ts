@@ -4,7 +4,7 @@ import { ServerType, ServerDescription} from "./server_description.ts"
 // const TopologyType = require('./topology_description').TopologyType;
 import { TopologyType, TopologyDescription} from "./topology_description.ts"
 // const ReadPreference = require('../topologies/read_preference');
-import {ReadPreference} from "./topologies/read_preference.ts"
+import {ReadPreference} from "./../topologies/read_preference.ts"
 // const MongoError = require('../error').MongoError;
 import { MongoError} from "./../errors.ts"
 

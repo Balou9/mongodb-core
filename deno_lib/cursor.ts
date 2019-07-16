@@ -15,9 +15,9 @@ import { MongoError, MongoNetworkError, mongoErrorContextSymbol} from "./errors.
 import {Callback, collationNotSupported, noop} from "./utils.ts"
 import { Server } from "./topologies/server.ts"
 import { Topology } from "./sdam/topology.ts"
-import { CommandResult } from "./../connection/command_result.ts"
+import { CommandResult } from "./connection/command_result.ts"
 // const wireProtocol = require('./wireprotocol');
-import * as wireprotocol from "./wireprotocol.ts"
+import * as wireprotocol from "./wireprotocol/mod.ts"
 // const BSON = retrieveBSON();
 // const Long = BSON.Long;
 

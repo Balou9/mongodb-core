@@ -7,14 +7,14 @@
 
 import { Connection } from "./connection.ts";
 // const Query = require('./commands').Query;
-import { Query } from "./commmands.ts"
+import { Query } from "./commands.ts"
 // const createClientInfo = require('../topologies/shared').createClientInfo;
 import { createClientInfo } from "./../topologies/shared.ts";
 // const MongoError = require('../error').MongoError;
 import { MongoError, MongoNetworkError} from "./../errors.ts"
 // const MongoNetworkError = require('../error').MongoNetworkError;
 // const defaultAuthProviders = require('../auth/defaultAuthProviders').defaultAuthProviders;
-import { AUTH_PROVIDERS } from "./../auth/authProviders.ts"
+import { DEFAULT_AUTH_PROVIDERS } from "./../auth/default_auth_providers.ts"
 // const WIRE_CONSTANTS = require('../wireprotocol/constants');
 // const MAX_SUPPORTED_WIRE_VERSION = WIRE_CONSTANTS.MAX_SUPPORTED_WIRE_VERSION;
 // const MAX_SUPPORTED_SERVER_VERSION = WIRE_CONSTANTS.MAX_SUPPORTED_SERVER_VERSION;
@@ -28,11 +28,11 @@ export interface ConnectOptions {
   // bson?: unknown;
 }
 
-// let AUTH_PROVIDERS: {[key:string]: Function} = defaultAuthProviders();
+// let DEFAULT_AUTH_PROVIDERS: {[key:string]: Function} = defaultAuthProviders();
 
 export async function connect(options: ConnectOptions): Promise<Connection> {
-  // if (!AUTH_PROVIDERS) {
-  //   AUTH_PROVIDERS = defaultAuthProviders(options.bson);
+  // if (!DEFAULT_AUTH_PROVIDERS) {
+  //   DEFAULT_AUTH_PROVIDERS = defaultAuthProviders(options.bson);
   // }
 
   if (options.family !== 4 && options.family !== 6) {
@@ -424,7 +424,7 @@ async function runCommand(connection: Connection, ns: string, command: { [key:st
 
 async function authenticate(conn: Deno.Conn, credentials: MongoCredentials): Promise<Deno.Conn> {
   const mechanism: string = credentials.mechanism;
-  const authProvider: any = AUTH_PROVIDERS[mechanism];
+  const authProvider: any = DEFAULT_AUTH_PROVIDERS[mechanism];
 
   if (!authProvider) {
     throw new MongoError(`authMechanism '${mechanism}' not supported`)

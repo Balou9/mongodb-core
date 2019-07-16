@@ -24,6 +24,7 @@ import { MESSAGE_HEADER_SIZE, COMPRESSION_DETAILS_SIZE, OPCODES} from "./../wire
 // const compressorIDs = require('../wireprotocol/compression').compressorIDs;
 // const uncompressibleCommands = require('../wireprotocol/compression').uncompressibleCommands;
 import { compress, compressorIDs, uncompressibleCommands } from "./../wireprotocol/compression.ts"
+import {Server} from "./../topologies/server.ts"
 // const apm = require('./apm');
 import { apm } from "./apm.ts"
 // const Buffer = require('safe-buffer').Buffer;
@@ -722,14 +723,14 @@ export interface PoolOptions {
   rejectUnauthorized?: boolean
   promoteValues?: boolean
   // domainsEnabled?: boolean,
-  agreedCompressor?: unknown
+  agreedCompressor?: string
   inTopology?: boolean,
   monitorCommands?: boolean
 }
 
 /** A class representation of a connection pool. */
 export class Pool extends EventEmitter {
-  readonly topology: unknown
+  readonly topology: Server
   readonly options: PoolOptions
   readonly id: number
 
@@ -752,7 +753,7 @@ export class Pool extends EventEmitter {
   _connectionParseErrorHandler: Callback
 
   /** Creates a new pool. */
-  constructor(topology: unknown, options: PoolOptions) {
+  constructor(topology: Server, options: PoolOptions) {
     // Add event listener
     // EventEmitter.call(this);
     super()
@@ -1018,7 +1019,7 @@ callback(null, null)
     this.logger.warn("Pool.prototype.unref is a noop method")
     // Get all the known connections
     // const connections: Connection[] = this.availableConnections.concat(this.inUseConnections);
-    // 
+    //
     // connections.forEach((connection: Connection): void => connection.unref());
   };
 

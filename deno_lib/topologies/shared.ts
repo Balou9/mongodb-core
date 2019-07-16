@@ -11,9 +11,9 @@ import {ReadPreference} from "./read_preference.ts"
 import {TopologyType} from "./../sdam/topology_description.ts"
 import {ServerType, ServerDescription} from "./../sdam/server_description.ts"
   import { MONGODB_CORE_VERSION } from "./../meta.ts"
-  import {MongoError} from "errors.ts"
+  import {MongoError} from "./../errors.ts"
 import { Callback,calculateDurationInMS, clone, noop} from "./../utils.ts"
-import { CommandResult} from "./../connection/command_result.ts" 
+import { CommandResult} from "./../connection/command_result.ts"
 
 const RETRYABLE_WIRE_VERSION: number = 6;
 
@@ -78,15 +78,15 @@ export function createClientInfo(options: {[key:string]:any}): ClientInfo {
   }
 
   // Do we have an application specific string
-  let appName: any = options.appName ||options.appname || options.application ||options.app
-  
-  if (appName && typeof appName === "string") {
+  let appname: any = options.appname ||options.appname || options.application ||options.app
+
+  if (appname && typeof appname === "string") {
     // // Cut at 128 bytes
     // var buffer = Buffer.from(options.appname);
     // // Return the truncated appname
     // var appname = buffer.length > 128 ? buffer.slice(0, 128).toString('utf8') : options.appname;
     // Add to the clientInfo
-    clientInfo.application = { name: appName.slice(0, 128) };
+    clientInfo.application = { name: appname.slice(0, 128) };
   }
 
   return clientInfo as ClientInfo;
@@ -176,10 +176,10 @@ export function emitTopologyDescriptionChanged(self: EventEmitter, description: 
 function changedIsMaster(self: any, currentIsmaster?: {[key:string]: any}, ismaster?: {[key:string]: any}): boolean {
   const currentType: string = getTopologyType(self, currentIsmaster);
   const newType: string = getTopologyType(self, ismaster);
-  
+
   return newType !== currentType
   // if (newType !== currentType){ return true;}
-  // 
+  //
   // return false;
 }
 
@@ -189,17 +189,17 @@ export function getTopologyType(self: any, ismaster: {[key:string]: any} = self.
   // }
 
   if (!ismaster) {return 'Unknown';}
-  
+
   if (ismaster.ismaster && ismaster.msg === 'isdbgrid') {return 'Mongos';}
-  
+
   if (ismaster.ismaster && !ismaster.hosts) {return 'Standalone';}
-  
+
   if (ismaster.ismaster){ return 'RSPrimary';}
-  
+
   if (ismaster.secondary){ return 'RSSecondary';}
-  
+
   if (ismaster.arbiterOnly) {return 'RSArbiter';}
-  
+
   return 'Unknown';
 }
 
@@ -218,7 +218,7 @@ export function inquireServerState (self: any): (callback: Callback) => void {
       // Calculate latencyMS
       // var latencyMS = new Date().getTime() - start;
       const latencyMS: number = calculateDurationInMS(start)
-      
+
       if (!err) {
         // Legacy event sender
         self.emit('ismaster', r, self);
@@ -278,21 +278,21 @@ export function inquireServerState (self: any): (callback: Callback) => void {
 
 // function Interval(fn, time) {
 //   var timer = false;
-// 
+//
 //   this.start = function() {
 //     if (!this.isRunning()) {
 //       timer = setInterval(fn, time);
 //     }
-// 
+//
 //     return this;
 //   };
-// 
+//
 //   this.stop = function() {
 //     clearInterval(timer);
 //     timer = false;
 //     return this;
 //   };
-// 
+//
 //   this.isRunning = function() {
 //     return timer !== false;
 //   };
@@ -303,13 +303,13 @@ export class Interval {
   timer: number = NaN;
   fn: Function
   time: number
-  
+
   /** Creates an interval. */
   constructor(fn: Function, time: number) {
     this.fn = fn
     this.time = time
   }
-  
+
   /** Starts an intetval. */
   start(): Interval {
     if (!this.isRunning()) {
@@ -318,14 +318,14 @@ export class Interval {
 
     return this;
   }
-  
+
   /** Stops an interval. */
   stop(): Interval {
     clearTimeout(this.timer);
     this.timer = NaN;
     return this;
   }
-  
+
   /** Is this interval running? */
   isRunning(): boolean {
     return this.timer !== NaN
@@ -337,13 +337,13 @@ export class Timeout {
   timer: number = NaN;
   fn: Function
   time: number
-  
+
   /** Creates a timeout. */
   constructor(fn: Function, time: number) {
     this.fn = fn
     this.time = time
   }
-  
+
   /** Starts a timeout. */
   start(): Interval {
     if (!this.isRunning()) {
@@ -352,14 +352,14 @@ export class Timeout {
 
     return this;
   }
-  
+
   /** Stops a timeout. */
   stop(): Interval {
     clearTimeout(this.timer);
     this.timer = NaN;
     return this;
   }
-  
+
   /** Is this timeout running? */
   isRunning(): boolean {
     return this.timer !== NaN
@@ -368,20 +368,20 @@ export class Timeout {
 
 // function Timeout(fn, time) {
 //   var timer = false;
-// 
+//
 //   this.start = function() {
 //     if (!this.isRunning()) {
 //       timer = setTimeout(fn, time);
 //     }
 //     return this;
 //   };
-// 
+//
 //   this.stop = function() {
 //     clearTimeout(timer);
 //     timer = false;
 //     return this;
 //   };
-// 
+//
 //   this.isRunning = function() {
 //     if (timer && timer._called) return false;
 //     return timer !== false;
@@ -400,7 +400,7 @@ export function diff(previous: {servers: ServerDescription[], [key:string]:any}=
   let i: number = 0;
   let j: number = 0
     let found: boolean = false;
-    
+
   // Check if we have any previous servers missing in the current ones
   for (i= 0; i < previous.servers.length; i++) {
     for (j = 0; j < current.servers.length; j++) {
@@ -517,7 +517,7 @@ function topologyType(topology:any): string {
 /** Determines whether the provided topology supports retryable writes. */
 export function isRetryableWritesSupported(topology: any /*Mongos | ReplSet*/): boolean {
   const maxWireVersion: number = topology.lastIsMaster().maxWireVersion;
-  
+
   if (maxWireVersion < RETRYABLE_WIRE_VERSION) {
     return false;
   }
